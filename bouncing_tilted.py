@@ -10,15 +10,15 @@ This script simulates the evolution of the liquid film between a horizontal soli
 Syntax
 ------
 
-python bouncing_tilted.py save_folder [optional arguments]
+python bouncing_simulation.py save_folder [optional arguments]
 
 save_folder: the folder to save all outputs
 
 optional arguments:
 # initial state
     -H, --H0 : initial separation (m), default to 1e-3
-    -V, --V0 : initial velocity (m/s), default to 0
-    -R, --radius : bubble radius (m), default to 5e-4
+    -V, --V0 : initial velocity (m/s), default to -0.3
+    -R, --radius : bubble radius (m), default to 6e-4
     -A, --angle : tilted angle of the solid surface (deg)
 
 # simulation parameters
@@ -34,7 +34,7 @@ optional arguments:
     --g : gravitational acceleration, m/s^2, default to 9.8
     --sigma : surface tension, N/m, default to 72e-3
     --rho : density of water, kg/m^3, default to 997
-    --freq : frequency of sound force, Hz, default to 75
+    --freq : sound frequency in Hz, default to 0
 
 
 Edit
@@ -42,7 +42,6 @@ Edit
 
 Jul 25, 2024: Initial commit. 
 Aug 12, 2024: (i) Add the ability to output information during the simulation; (ii) Add the ability to load initial state from a folder. (iii) Force garbage collection after each time step.
-Feb 24, 2024: Include sound force.
 """
 
 import sys
@@ -53,10 +52,11 @@ import argparse
 import json
 import time
 import pdb
-# from memory_profiler import profile
+#from memory_profiler import profile
 import gc
+import pandas as pd
 
-def film_drainage(t, state, x, y, R, theta, rho, g, mu, sigma, freq):
+def film_drainage(t, state, x, y, w, R, theta, rho, g, mu, sigma):
     """
     Compute the time derivative of the film thickness h and the bubble velocity V. The film thickness is represented by a 2D array h, and the bubble velocity is represented by a 1D array V. The film thickness `h` and bubble velocity `V` are reshaped into a 1D array `state`. The film thickness is solved by the coupled equations of Stokes-Reynolds equation and Young-Laplace equation, and the bubble velocity is solved by the force balance equation. 
     """
@@ -73,12 +73,8 @@ def film_drainage(t, state, x, y, R, theta, rho, g, mu, sigma, freq):
     p = YL_equation(h, x, y, sigma, R)
 
     # compute force balance
-    buoyancy, drag, amf2, tff, Cm = compute_force(state, x, y, R=R, rho=rho, g=g, mu=mu, sigma=sigma, theta=theta)
-
-    # compute sound force
-    sf = compute_sound_force(t, freq, theta)
-
-    dVdt = (buoyancy + drag + amf2 + tff + sf) / (4 / 3 * np.pi * rho * R**3 * Cm)
+    buoyancy, drag, amf2, tff, Cm, sound = compute_force(state, x, y, w, t, R=R, rho=rho, g=g, mu=mu, sigma=sigma, theta=theta)
+    dVdt = (buoyancy + drag + amf2 + tff + sound) / (4 / 3 * np.pi * rho * R**3 * Cm)
 
     dhdt = np.zeros(h.shape)
     
@@ -118,7 +114,7 @@ def YL_equation(h, x, y, sigma, R):
 
     return p
 
-def compute_force(state, x, y, **initial_params):
+def compute_force(state, x, y, w, t, **initial_params):
     R = initial_params["R"]
     rho = initial_params["rho"]
     g = initial_params["g"]
@@ -158,13 +154,16 @@ def compute_force(state, x, y, **initial_params):
     tffx = integrate.trapezoid(p, x=x, axis=0)
     tff = np.array([0, 0, integrate.trapezoid(tffx, x=y, axis=0)])
 
-    return buoyancy, drag, amf2, tff, Cm
+    def amplitude(w):
+        ampls = pd.read_csv(r"C:\Users\Justi\OneDrive\Cornell\Research.DrJung.Zhengyang\Bubble_cleaning\force_data.csv")
+        return ampls.set_index("freq").loc[w, "force"]
+    
+    sound = -1 * amplitude(w) * np.sin(w * t * 2 * np.pi)
+    Sv = [sound * np.cos(theta * np.pi / 180), 0, sound * np.sin(theta * np.pi / 180)]
 
-def compute_sound_force(t, freq, theta):
-    """ A simplified model of the sound force, informed by the experimental data. """
-    amp = 1e-6 # Note, in the final version, amplitude is also a function of frequency
-    sf = np.array([amp*np.cos(2*np.pi*freq*t), 0, amp*np.sin(2*np.pi*freq*t)])
-    return sf
+    return buoyancy, drag, amf2, tff, Cm, Sv
+###### read up to here 
+
 
 def save_state(save_folder, t_current, h, V):
     """ Save surface shape h and velocity V data to files. The folder structure resembles that of OpenFOAM, where each time step is saved in a separate folder.  """
@@ -192,7 +191,7 @@ def log_force(save_folder, forces, V, H, t_current):
         with open(force_file, "w") as f:
             f.write("{0:>12s}{1:>12s}{2:>12s}{3:>12s}{4:>12s}{5:>12s}{6:>12s}{7:>12s}{8:>12s}{9:>12s}{10:>12s}{11:>12s}{12:>12s}{13:>12s}{14:>12s}{15:>12s}{16:>12s}\n".format("Time", "Distance", "Velocity_x", "Velocity_y", "Velocity_z", "Buoyancy_x", "Buoyancy_y", "Buoyancy_z", "Drag_x", "Drag_y", "Drag_z", "AMF2_x", "AMF2_y", "AMF2_z", "TFF_x", "TFF_y", "TFF_z"))
     with open(force_file, "a") as f:
-        buoyancy, drag, amf2, tff, cm = forces
+        buoyancy, drag, amf2, tff, cm, sound = forces
         f.write("{0:12.8f}{1:12.8f}{2:12.8f}{3:12.8f}{4:12.8f}{5:12.8f}{6:12.8f}{7:12.8f}{8:12.8f}{9:12.8f}{10:12.8f}{11:12.8f}{12:12.8f}{13:12.8f}{14:12.8f}{15:12.8f}{16:12.8f}\n".format(t_current, H, *V, *buoyancy, *drag, *amf2, *tff))
 
 def log_initial_params(args):
@@ -223,17 +222,17 @@ def args_to_dict(args):
         "g" : args.g,
         "sigma" : args.sigma,
         "rho" : args.rho,
-        "freq" : args.freq,
     
         # simulation params
         "rm" : args.rm,
         "time" : args.time,
         "save_time" : args.save_time,
-        "N" : args.number
+        "N" : args.number,
+        "freq" : args.freq
     }
     return initial_params
 
-# @profile
+#@profile
 def main(args):
     save_folder = args.save_folder
     load_folder = args.load_folder
@@ -245,7 +244,6 @@ def main(args):
         R = initial_params["R"]
         N = initial_params["N"]
         H0 = initial_params["H0"]
-        theta = initial_params["theta"]
         rm = rm * R
         x = np.linspace(-rm, rm, num=N)
         y = np.linspace(-rm, rm, num=N)
@@ -255,6 +253,7 @@ def main(args):
         Y, X = np.meshgrid(x, y)
         h = H0 + (X**2+Y**2) / R / 2
         V = initial_params["V0"]
+        theta = initial_params["theta"]
 
         Vv = np.array([-V*np.sin(theta/180*np.pi), 0, V*np.cos(theta/180*np.pi)])
 
@@ -270,6 +269,10 @@ def main(args):
         rm = rm * R
         x = np.linspace(-rm, rm, num=N)
         y = np.linspace(-rm, rm, num=N)
+        # initial state
+        
+        Y, X = np.meshgrid(x, y)
+        theta = initial_params["theta"]
         # load current state t, h, V
         t_current, h, Vv = load_state(load_folder)
     
@@ -279,8 +282,8 @@ def main(args):
     g = initial_params["g"]
     sigma = initial_params["sigma"]
     rho = initial_params["rho"]
-    theta = initial_params["theta"]
-    freq = initial_params["freq"]
+    w = initial_params["freq"]
+    
     
     
 
@@ -296,13 +299,13 @@ def main(args):
         t_current = t_eval[i+1]
         # pdb.set_trace()
         sol = integrate.solve_ivp(film_drainage, [t_previous, t_current], state, \
-                                    t_eval=[t_current], args=(x, y, R, theta, rho, g, mu, sigma, freq), \
+                                    t_eval=[t_current], args=(x, y, w, R, theta, rho, g, mu, sigma), \
                                     atol=1e-6, rtol=1e-6, method="BDF")
         state = sol.y[:, -1]
-        h, Vv = state[:-3], state[-3:]
+        h, Vv = state[:-3].reshape(X.shape), state[-3:]
         save_state(save_folder, t_current, h, Vv)
-        forces = compute_force(state, x, y, R=R, rho=rho, g=g, mu=mu, sigma=sigma, theta=theta)
-        log_force(save_folder, forces, Vv, h[len(h)//2], t_current)
+        forces = compute_force(state, x, y, w, sol.t[-1], R=R, rho=rho, g=g, mu=mu, sigma=sigma, theta=theta)
+        log_force(save_folder, forces, Vv, h[X.shape[0]//2, X.shape[1]//2], t_current)
         print(t_current)
         # release memory after saving the state
         del sol
@@ -324,13 +327,13 @@ if __name__ == "__main__":
     parser.add_argument("save_folder", help="Folder to save simulation results.")
     # initial state
     parser.add_argument("-H", "--H0", type=float, default=1.0e-3, help="Initial separation in meters.")
-    parser.add_argument("-V", "--V0", type=float, default=0.0, help="Initial velocity in m/s.")
-    parser.add_argument("-R", "--radius", type=float, default=5.0e-4, help="Bubble radius in meters.")
+    parser.add_argument("-V", "--V0", type=float, default=-0.3, help="Initial velocity in m/s.")
+    parser.add_argument("-R", "--radius", type=float, default=6.0e-4, help="Bubble radius in meters.")
     parser.add_argument("-A", "--angle", type=float, default=22.5, help="Tilted angle of solid surface.")
 
     # simulation params
     parser.add_argument("-T", "--time", type=float, default=0.02, help="Total simulation time in seconds.")
-    parser.add_argument("-N", "--number", type=int, default=100, help="Number of discretization points.")
+    parser.add_argument("-N", "--number", type=int, default=50, help="Number of discretization points.")
     parser.add_argument("-s", "--save_time", type=float, default=1e-4, help="Save the states every save_time.")
     parser.add_argument("--rm", type=float, default=0.9, help="Range of integration, when times R.")
     parser.add_argument("--load_folder", type=str, default=None, help="Folder to load initial state from.")
@@ -340,7 +343,7 @@ if __name__ == "__main__":
     parser.add_argument("--g", type=float, default=9.8, help="Gravitational acceleration in m/s^2.")
     parser.add_argument("--sigma", type=float, default=72e-3, help="Surface tension in N/m.")
     parser.add_argument("--rho", type=float, default=997, help="Density of water in kg/m^3.")
-    parser.add_argument("--freq", type=float, default=75, help="Frequency of sound force in Hz.")
+    parser.add_argument("--freq", type=int, default=0, help="Sound frequency in Hz.")
 
     args = parser.parse_args()
     main(args)
