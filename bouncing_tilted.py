@@ -42,6 +42,7 @@ Edit
 
 Jul 25, 2024: Initial commit. 
 Aug 12, 2024: (i) Add the ability to output information during the simulation; (ii) Add the ability to load initial state from a folder. (iii) Force garbage collection after each time step.
+Mar 13, 2025: If `args.freq` is 0, the script will skip the data reading. This allows testing the code without the data file. 
 """
 
 import sys
@@ -155,6 +156,8 @@ def compute_force(state, x, y, w, t, **initial_params):
     tff = np.array([0, 0, integrate.trapezoid(tffx, x=y, axis=0)])
 
     def amplitude(w):
+        if w == 0:
+            return 0
         ampls = pd.read_csv(r"C:\Users\Justi\OneDrive\Cornell\Research.DrJung.Zhengyang\Bubble_cleaning\force_data.csv")
         return ampls.set_index("freq").loc[w, "force"]
     
