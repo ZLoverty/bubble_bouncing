@@ -42,7 +42,7 @@ Edit
 
 Jul 25, 2024: Initial commit. 
 Aug 12, 2024: (i) Add the ability to output information during the simulation; (ii) Add the ability to load initial state from a folder. (iii) Force garbage collection after each time step.
-Mar 13, 2025: If `args.freq` is 0, the script will skip the data reading. This allows testing the code without the data file. 
+Mar 13, 2025: (i) If `args.freq` is 0, the script will skip the data reading. This allows testing the code without the data file; (ii) Fix the derivative order, y is row and x is column; (iii) Add thin film force in x.
 """
 
 import sys
@@ -61,15 +61,15 @@ def film_drainage(t, state, x, y, w, R, theta, rho, g, mu, sigma):
     """
     Compute the time derivative of the film thickness h and the bubble velocity V. The film thickness is represented by a 2D array h, and the bubble velocity is represented by a 1D array V. The film thickness `h` and bubble velocity `V` are reshaped into a 1D array `state`. The film thickness is solved by the coupled equations of Stokes-Reynolds equation and Young-Laplace equation, and the bubble velocity is solved by the force balance equation. 
     """
-    Y, X = np.meshgrid(x, y)
+    X, Y = np.meshgrid(x, y)
 
     # break the state into h and V
     h = state[:-3].reshape(X.shape)
     V = state[-3:]
 
     # compute differential spaces
-    dx = (X[2:  , 1:-1] - X[ :-2, 1:-1]) / 2
-    dy = (Y[1:-1, 2:  ] - Y[1:-1,  :-2]) / 2
+    dy = (Y[2:  , 1:-1] - Y[ :-2, 1:-1]) / 2
+    dx = (X[1:-1, 2:  ] - X[1:-1,  :-2]) / 2
     
     p = YL_equation(h, x, y, sigma, R)
 
@@ -80,12 +80,12 @@ def film_drainage(t, state, x, y, w, R, theta, rho, g, mu, sigma):
     dhdt = np.zeros(h.shape)
     
     # Stokes-Reynolds equation
-    dhdx = (h[2:, 1:-1] - h[:-2, 1:-1]) / dx / 2
-    dpdx = (p[2:, 1:-1] - p[:-2, 1:-1]) / dx / 2
-    d2pdx = (p[2:, 1:-1] - 2*p[1:-1, 1:-1] + p[:-2, 1:-1]) / dx**2
-    dhdy = (h[1:-1, 2:] - h[1:-1, :-2]) / dy / 2
+    dhdy = (h[2:, 1:-1] - h[:-2, 1:-1]) / dy / 2
     dpdy = (p[2:, 1:-1] - p[:-2, 1:-1]) / dy / 2
-    d2pdy = (p[1:-1, 2:] - 2 * p[1:-1, 1:-1] + p[1:-1, :-2]) / dy**2
+    d2pdy = (p[2:, 1:-1] - 2*p[1:-1, 1:-1] + p[:-2, 1:-1]) / dy**2
+    dhdx = (h[1:-1, 2:] - h[1:-1, :-2]) / dx / 2
+    dpdx = (p[2:, 1:-1] - p[:-2, 1:-1]) / dx / 2
+    d2pdx = (p[1:-1, 2:] - 2 * p[1:-1, 1:-1] + p[1:-1, :-2]) / dx**2
     dhdt[1:-1, 1:-1] = V[0]*dhdx + V[1]*dhdy + \
                     h[1:-1, 1:-1]**2/3/mu * (h[1:-1, 1:-1]*d2pdx + 3*dhdx*dpdx) + \
                     h[1:-1, 1:-1]**2/3/mu * (h[1:-1, 1:-1]*d2pdy + 3*dhdy*dpdy)
@@ -99,14 +99,14 @@ def film_drainage(t, state, x, y, w, R, theta, rho, g, mu, sigma):
     return np.append(dhdt.reshape(len(x)*len(y)), dVdt)
 
 def YL_equation(h, x, y, sigma, R):
-    Y, X = np.meshgrid(x, y)
+    X, Y = np.meshgrid(x, y)
 
-    dx = (X[2:  , 1:-1] - X[ :-2, 1:-1]) / 2
-    dy = (Y[1:-1, 2:  ] - Y[1:-1,  :-2]) / 2
+    dy = (Y[2:  , 1:-1] - Y[ :-2, 1:-1]) / 2
+    dx = (X[1:-1, 2:  ] - X[1:-1,  :-2]) / 2
 
     p = np.zeros_like(h)
 
-    p[1:-1, 1:-1] = 2 * sigma / R - sigma * (h[2:, 1:-1] - 2*h[1:-1, 1:-1] + h[:-2, 1:-1]) / dx**2 - sigma * (h[1:-1, 2:] - 2 * h[1:-1, 1:-1] + h[1:-1, :-2]) / dy**2
+    p[1:-1, 1:-1] = 2 * sigma / R - sigma * (h[2:, 1:-1] - 2*h[1:-1, 1:-1] + h[:-2, 1:-1]) / dy**2 - sigma * (h[1:-1, 2:] - 2 * h[1:-1, 1:-1] + h[1:-1, :-2]) / dx**2
 
     p[ 0 , : ] = 0
     p[-1 , : ] = 0
@@ -122,7 +122,8 @@ def compute_force(state, x, y, w, t, **initial_params):
     mu = initial_params["mu"]
     sigma = initial_params["sigma"]
     theta = initial_params["theta"]
-    Y, X = np.meshgrid(x, y)
+    X, Y = np.meshgrid(x, y)
+    dx = (X[1:-1, 2:  ] - X[1:-1,  :-2]) / 2
 
     h = state[:-3].reshape(X.shape)
     V = state[-3:]
@@ -151,10 +152,20 @@ def compute_force(state, x, y, w, t, **initial_params):
     Cm = 0.5
     amf2 = np.array([0, 0, 0])
 
+    # thin film force x-component
     p = YL_equation(h, x, y, sigma, R)
-    tffx = integrate.trapezoid(p, x=x, axis=0)
-    tff = np.array([0, 0, integrate.trapezoid(tffx, x=y, axis=0)])
+    dhdx = (h[1:-1, 2:] - h[1:-1, :-2]) / dx / 2
+    pdhdx = np.zeros_like(p)
+    pdhdx[1:-1, 1:-1] = p[1:-1, 1:-1] * dhdx
+    tffx_tmp = integrate.trapezoid(pdhdx, x=x, axis=0)
+    tffx = integrate.trapezoid(tffx_tmp, x=y, axis=0)
 
+    # thin film force z-component
+    tffz_tmp = integrate.trapezoid(p, x=x, axis=0)
+    tffz = integrate.trapezoid(tffz_tmp, x=y, axis=0)
+
+    tff = np.array([tffx, 0, tffz])
+    
     def amplitude(w):
         if w == 0:
             return 0
