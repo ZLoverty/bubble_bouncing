@@ -44,6 +44,7 @@ Jul 25, 2024: Initial commit.
 Aug 12, 2024: (i) Add the ability to output information during the simulation; (ii) Add the ability to load initial state from a folder. (iii) Force garbage collection after each time step.
 Mar 13, 2025: (i) If `args.freq` is 0, the script will skip the data reading. This allows testing the code without the data file; (ii) Fix the derivative order, y is row and x is column; (iii) Add thin film force in x.
 Mar 14, 2025: (i) Add an error handler for the solver: if no solution is found, print the error message and break the loop; (ii) Improve print messages to show the time, height and velocity information; (iii) Use numpy.gradient function to do derivatives, instead of writing out slicing explicitly; (iv) Use global variables to avoid passing too many arguments.
+Mar 15, 2025: (i) Use forth order approximation for the derivatives;
 """
 
 import sys
@@ -314,7 +315,7 @@ def main(args):
         t_current = t_eval[i+1]
         # pdb.set_trace()
         sol = integrate.solve_ivp(film_drainage, [t_previous, t_current], state, \
-            t_eval=[t_current], atol=1e-6, rtol=1e-3, method="BDF")
+            t_eval=[t_current], atol=1e-9, rtol=1e-9, method="BDF")
 
         # solver error handler
         try:
