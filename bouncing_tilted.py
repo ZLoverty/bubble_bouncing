@@ -80,10 +80,10 @@ def film_drainage(t, state):
     # Stokes-Reynolds equation
     dhdy = np.gradient(h, axis=0, edge_order=2) / dy 
     dpdy = np.gradient(p, axis=0, edge_order=2) / dy
-    d2pdy = np.gradient(dpdy, axis=0, edge_order=2) / dy**2 
+    d2pdy = np.gradient(dpdy, axis=0, edge_order=2) / dy
     dhdx = np.gradient(h, axis=1, edge_order=2) / dx 
     dpdx = np.gradient(p, axis=1, edge_order=2) / dx
-    d2pdx = np.gradient(dpdx, axis=1, edge_order=2) / dx**2
+    d2pdx = np.gradient(dpdx, axis=1, edge_order=2) / dx
     dhdt = V[0]*dhdx + V[1]*dhdy + \
         h**2/3/mu * (h*d2pdx + 3*dhdx*dpdx) + \
             h**2/3/mu * (h*d2pdy + 3*dhdy*dpdy)
