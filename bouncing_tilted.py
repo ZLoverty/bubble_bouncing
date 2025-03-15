@@ -43,7 +43,7 @@ Edit
 Jul 25, 2024: Initial commit. 
 Aug 12, 2024: (i) Add the ability to output information during the simulation; (ii) Add the ability to load initial state from a folder. (iii) Force garbage collection after each time step.
 Mar 13, 2025: (i) If `args.freq` is 0, the script will skip the data reading. This allows testing the code without the data file; (ii) Fix the derivative order, y is row and x is column; (iii) Add thin film force in x.
-Mar 14, 2025: (i) Add an error handler for the solver: if no solution is found, print the error message and break the loop; (ii) Improve print messages to show the time, height and velocity information. (iii) Use numpy.gradient function to do derivatives, instead of writing out slicing explicitly.
+Mar 14, 2025: (i) Add an error handler for the solver: if no solution is found, print the error message and break the loop; (ii) Improve print messages to show the time, height and velocity information; (iii) Use numpy.gradient function to do derivatives, instead of writing out slicing explicitly; (iv) Use global variables to avoid passing too many arguments.
 """
 
 import sys
@@ -58,23 +58,22 @@ import gc
 import pandas as pd
 
 
-def film_drainage(t, state, x, y, w, R, theta, rho, g, mu, sigma):
+def film_drainage(t, state):
     """
     Compute the time derivative of the film thickness h and the bubble velocity V. The film thickness is represented by a 2D array h, and the bubble velocity is represented by a 1D array V. The film thickness `h` and bubble velocity `V` are reshaped into a 1D array `state`. The film thickness is solved by the coupled equations of Stokes-Reynolds equation and Young-Laplace equation, and the bubble velocity is solved by the force balance equation. 
     """
-    X, Y = np.meshgrid(x, y)
+    # X, Y = np.meshgrid(x, y)
 
     # break the state into h and V
-    h = state[:-3].reshape(X.shape)
+    h = state[:-3].reshape(dx.shape)
     V = state[-3:]
 
     # compute differential spaces
-    dy = np.gradient(Y, axis=0, edge_order=2)
-    dx = np.gradient(X, axis=1, edge_order=2)
+    # dy = np.gradient(Y, axis=0, edge_order=2)
+    # dx = np.gradient(X, axis=1, edge_order=2)
     
-    p = YL_equation(h, x, y, sigma, R)
+    p = YL_equation(h)
 
-    
     # velocity boundary conditions
     dhdt = np.zeros_like(h)
     
@@ -97,18 +96,18 @@ def film_drainage(t, state, x, y, w, R, theta, rho, g, mu, sigma):
     # pdb.set_trace()
     # print(t, p.shape, dhdx.shape)
     # compute force balance
-    buoyancy, drag, amf2, tff, Cm, sound = compute_force(state, x, y, w, t, p, dhdx, R=R, rho=rho, g=g, mu=mu, sigma=sigma, theta=theta)
+    buoyancy, drag, amf2, tff, Cm, sound = compute_force(state, t, p, dhdx)
     dVdt = (buoyancy + drag + amf2 + tff + sound) / (4 / 3 * np.pi * rho * R**3 * Cm)
     # print(V[2])
 
     return np.append(dhdt.reshape(len(x)*len(y)), dVdt)
 
-def YL_equation(h, x, y, sigma, R):
-    X, Y = np.meshgrid(x, y)
+def YL_equation(h):
+    # X, Y = np.meshgrid(x, y)
 
     # compute differential spaces
-    dy = np.gradient(Y, axis=0, edge_order=2)
-    dx = np.gradient(X, axis=1, edge_order=2)
+    # dy = np.gradient(Y, axis=0, edge_order=2)
+    # dx = np.gradient(X, axis=1, edge_order=2)
 
     d2hdx = np.gradient(np.gradient(h, axis=1, edge_order=2), axis=1, edge_order=2) / dx**2
     d2hdy = np.gradient(np.gradient(h, axis=0, edge_order=2), axis=0, edge_order=2) / dy**2
@@ -123,20 +122,14 @@ def YL_equation(h, x, y, sigma, R):
     return p
 
 
-def compute_force(state, x, y, w, t, p, dhdx, **initial_params):
-    R = initial_params["R"]
-    rho = initial_params["rho"]
-    g = initial_params["g"]
-    mu = initial_params["mu"]
-    sigma = initial_params["sigma"]
-    theta = initial_params["theta"]
-    X, Y = np.meshgrid(x, y)
-    dx = (X[1:-1, 2:  ] - X[1:-1,  :-2]) / 2
+def compute_force(state, t, p, dhdx):
+    # X, Y = np.meshgrid(x, y)
+    # dx = (X[1:-1, 2:  ] - X[1:-1,  :-2]) / 2
 
-    h = state[:-3].reshape(X.shape)
+    h = state[:-3].reshape(dx.shape)
     V = state[-3:]
 
-    H = h[len(x)//2, len(y)//2]
+    H = h[h.shape[0]//2, h.shape[1]//2]
     gv = np.array([-g*np.sin(theta/180*np.pi), 0, g*np.cos(theta/180*np.pi)])
 
     buoyancy = -4/3 * np.pi * R**3 * rho * gv
@@ -255,6 +248,7 @@ def args_to_dict(args):
 
 #@profile
 def main(args):
+    global x, y, dx, dy, R, mu, g, sigma, rho, w, theta
     save_folder = args.save_folder
     load_folder = args.load_folder
 
@@ -269,9 +263,11 @@ def main(args):
         x = np.linspace(-rm, rm, num=N)
         y = np.linspace(-rm, rm, num=N)
 
-        # initial state
-        t_current = 0
         X, Y = np.meshgrid(x, y)
+        dx = np.gradient(X, axis=1, edge_order=2)
+        dy = np.gradient(Y, axis=0, edge_order=2) 
+        # initial state
+        t_current = 0 
         h = H0 + (X**2 + Y**2) / R / 2
         V = initial_params["V0"]
         theta = initial_params["theta"]
@@ -287,13 +283,8 @@ def main(args):
         rm = initial_params["rm"]
         R = initial_params["R"]
         N = initial_params["N"]
-        rm = rm * R
-        x = np.linspace(-rm, rm, num=N)
-        y = np.linspace(-rm, rm, num=N)
-        # initial state
-        
-        X, Y = np.meshgrid(x, y)
         theta = initial_params["theta"]
+        
         # load current state t, h, V
         t_current, h, Vv = load_state(load_folder)
 
@@ -305,6 +296,7 @@ def main(args):
     rho = initial_params["rho"]
     w = initial_params["freq"]
 
+    
     # Summarize initial conditions
     print(f"Bubble R={R*1e3:.2f} mm is released at H0={H0*1e6:.2f} um with V0={Vv} m/s")
     # prints start message
@@ -322,8 +314,7 @@ def main(args):
         t_current = t_eval[i+1]
         # pdb.set_trace()
         sol = integrate.solve_ivp(film_drainage, [t_previous, t_current], state, \
-            t_eval=[t_current], args=(x, y, w, R, theta, rho, g, mu, sigma), \
-                atol=1e-6, rtol=1e-6, method="Radau")
+            t_eval=[t_current], atol=1e-6, rtol=1e-3, method="BDF")
 
         # solver error handler
         try:
@@ -334,10 +325,9 @@ def main(args):
 
         h, Vv = state[:-3].reshape(X.shape), state[-3:]
         save_state(save_folder, t_current, h, Vv)
-        p = YL_equation(h, x, y, sigma, R)
-        dx = np.gradient(X, axis=1, edge_order=2)
+        p = YL_equation(h)
         dhdx = np.gradient(h, axis=1, edge_order=2) / dx 
-        forces = compute_force(state, x, y, w, sol.t[-1], p, dhdx, R=R, rho=rho, g=g, mu=mu, sigma=sigma, theta=theta)
+        forces = compute_force(state, sol.t[-1], p, dhdx)
         log_force(save_folder, forces, Vv, h[X.shape[0]//2, X.shape[1]//2], t_current)
         print(f"{time.asctime()} -> t={t_current*1e3:.1f} ms | H={h[X.shape[0]//2, X.shape[1]//2]*1e6:.1f} um | Vz={Vv[2]*1e3:.1f} mm/s")
         # release memory after saving the state
