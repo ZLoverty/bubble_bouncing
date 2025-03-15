@@ -80,10 +80,10 @@ def film_drainage(t, state):
     # Stokes-Reynolds equation
     dhdy = np.gradient(h, axis=0, edge_order=2) / dy 
     dpdy = np.gradient(p, axis=0, edge_order=2) / dy
-    d2pdy = np.gradient(np.gradient(p, axis=0, edge_order=2), axis=0, edge_order=2) / dy**2 
+    d2pdy = np.gradient(dpdy, axis=0, edge_order=2) / dy**2 
     dhdx = np.gradient(h, axis=1, edge_order=2) / dx 
     dpdx = np.gradient(p, axis=1, edge_order=2) / dx
-    d2pdx = np.gradient(np.gradient(p, axis=1, edge_order=2), axis=1, edge_order=2) / dx**2
+    d2pdx = np.gradient(dpdx, axis=1, edge_order=2) / dx**2
     dhdt = V[0]*dhdx + V[1]*dhdy + \
         h**2/3/mu * (h*d2pdx + 3*dhdx*dpdx) + \
             h**2/3/mu * (h*d2pdy + 3*dhdy*dpdy)
@@ -145,12 +145,12 @@ def compute_force(state, t, p, dhdx):
     else:
         drag = - 48 * G * (1 + K / Re**0.5) * np.pi / 4 * mu * R * V
 
-    # zeta = (H + R) / R
-    # Cm = 0.5 + 0.19222 * zeta**-3.019 + 0.06214 * zeta**-8.331 + 0.0348 * zeta**-24.65 + 0.0139 * zeta**-120.7
+    zeta = (H + R) / R
+    Cm = 0.5 + 0.19222 * zeta**-3.019 + 0.06214 * zeta**-8.331 + 0.0348 * zeta**-24.65 + 0.0139 * zeta**-120.7
     # dCmdH = (-3.019*0.19222 * zeta**-4.019 - 8.331*0.06214 * zeta**-9.331 - 24.65*0.0348 * zeta**-25.65 - 120.7*0.0139 * zeta**-121.7) / R
-    # amf2 = - 2/3 * np.pi * R**3 * rho * dCmdH * V**2
+    # amf2 = 2/3 * np.pi * R**3 * rho * dCmdH * V**2
 
-    Cm = 0.5
+    # Cm = 0.5
     amf2 = np.array([0, 0, 0])
 
     # thin film force x-component
@@ -159,8 +159,8 @@ def compute_force(state, t, p, dhdx):
     # pdhdx = np.zeros_like(p)
     # pdhdx[1:-1, 1:-1] = p[1:-1, 1:-1] * dhdx
     # pdb.set_trace()
-    # tffx_tmp = integrate.trapezoid(p*dhdx, x=x, axis=0)
-    tffx = 0# integrate.trapezoid(tffx_tmp, x=y, axis=0)
+    tffx_tmp = integrate.trapezoid(p*dhdx, x=x, axis=0)
+    tffx = integrate.trapezoid(tffx_tmp, x=y, axis=0)
 
     # thin film force z-component
     tffz_tmp = integrate.trapezoid(p, x=x, axis=0)
