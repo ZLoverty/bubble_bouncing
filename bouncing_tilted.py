@@ -105,7 +105,7 @@ def compute_force(state, t, p, dhdx):
     h = state[:-3]
     V = state[-3:]
 
-    H = h[len(h)//2]
+    H = h[mid_ind]
     
     buoyancy = -4/3 * np.pi * R**3 * rho * gv
 
@@ -214,11 +214,18 @@ def args_to_dict(args):
     }
     return initial_params
 
+def jacobian(t, y):
+    # Sparse matrix example, assuming a simple system
+    # This is just an example, you can adapt it to your problem
+    diag_values = [1, -1, 0, 1]  # Example diagonals
+    matrix = diags(diag_values, [0, 1, -1, 2], shape=(len(y), len(y)))
+    return matrix
+
 def main(args):
     # define constants as globals, to avoid passing too many arguments
-    ############################################################################
-    global x, y, dx, dy, N, R, mu, gv, sigma, rho, w, theta, edge_ind, inertia_coef
-    #############################################################################
+    ########################################################################################
+    global x, y, dx, dy, N, R, mu, gv, sigma, rho, w, theta, edge_ind, inertia_coef, mid_ind
+    ########################################################################################
     save_folder = args.save_folder
     load_folder = args.load_folder
 
@@ -247,6 +254,9 @@ def main(args):
         edge_ind[:, 0], edge_ind[:, -1], edge_ind[0, :], edge_ind[-1, :] = True, True, True, True
         edge_ind = edge_ind.flatten()
 
+        # find midpoint index
+        mid_ind = (N+1)*(N//2)
+
         # save initial state to file
         save_state(save_folder, t_current, h, V)
         log_initial_params(args)
@@ -273,19 +283,34 @@ def main(args):
 
     # Define finite difference gradient operators (sparse matrix)
     global Gx, Gy, G2x, G2y, L2D
-    # 1D first derivative operator (gradient)
-    Dx = diags([-1, 1], [-1, 1], shape=(N, N))
+    # 1D first derivative operator (2nd order accuracy)
+    # Dx = diags([-1, 1], [-1, 1], shape=(N, N))
+    # Dx = Dx.toarray()
+    # Dx[0, :3] = [-3, 4, -1]
+    # Dx[-1, -3:] = [1, -4, 3]
+    # Dx /= 2*dx
+    # 1D first derivative operator (4th order accuracy)
+    Dx = diags([1, -8, 8,-1], [-2, -1, 1, 2], shape=(N, N))
     Dx = Dx.toarray()
-    Dx[0, :3] = [-3, 4, -1]
-    Dx[-1, -3:] = [1, -4, 3]
-    Dx /= 2*dx
-    # Dy = diags([-1, 1], [-1, 1], shape=(N, N)) / dy
-    # 1D second derivative operator (Laplacian)
+    Dx[0, :5] = [-25, 48, -36, 16, -3]
+    Dx[1, :6] = [0, -25, 48, -36, 16, -3]
+    Dx[-2, -6:] = [3, -16, 36, -48, 25, 0]
+    Dx[-1, -5:] = [3, -16, 36, -48, 25]
+    Dx /= 12*dx
+    # 1D second derivative operator (2nd order accuracy)
     D2x = diags([1, -2, 1], [-1, 0, 1], shape=(N, N))
     D2x = D2x.toarray()
-    D2x[0, :4] = [-2, 5, -4, 1]
+    D2x[0, :4] = [2, -5, 4, -1]
     D2x[-1, -4:] = [-1, 4, -5, 2]
     D2x /= dx**2
+    # 1D second derivative operator (4th order accuracy)
+    # D2x = diags([-1, 16, -30, 16, -1], [-2, -1, 0, 1, 2], shape=(N, N))
+    # D2x = D2x.toarray()
+    # D2x[0 ,   :6 ] = [45 , -154 , 214 , -156 ,   61, -10]
+    # D2x[1 ,  :7 ] = [0, 45 , -154 , 214 , -156 ,   61, -10]
+    # D2x[-2, -7:] = [-10, 61   , -156, 214  , -154,  45, 0]
+    # D2x[-1, -6:  ] = [-10, 61   , -156, 214  , -154,  45]
+    # D2x /= 12*dx**2
     # 1st and 2nd order derivative operators
     eye = identity(N)
     Gx = kron(eye, Dx)
@@ -296,14 +321,17 @@ def main(args):
     L2D = G2x + G2y
 
     
-    # Summarize initial conditions
-    print(f"Bubble R={R*1e3:.2f} mm is released at H0={H0*1e6:.2f} um with V0={Vv} m/s")
     # prints start message
-    print("Simulation begins at {}".format(time.asctime()))
+    print(f"Bubble R={R*1e3:.2f} mm is released !")
+    start_message = "Simulation begins at {}".format(time.asctime())
+    print("\n".join([start_message, "="*len(start_message)]))
+
+    # compute simulation time steps and save time steps
     nSave = np.floor((T-t_current) / save_time).astype("int")
     t_eval = np.linspace(t_current, T, num=nSave)
     state = np.append(h, Vv)
-    # print the first state
+
+    # print the initial state
     print(f"{time.asctime()} -> t={t_current*1e3:.1f} ms | H={h[X.shape[0]//2, X.shape[1]//2]*1e6:.1f} um | Vz={Vv[2]*1e3:.1f} mm/s")
     
 
@@ -326,8 +354,8 @@ def main(args):
         save_state(save_folder, t_current, h, Vv)
         p = YL_equation(h)
         forces = compute_force(state, sol.t[-1], p, Gx @ h)
-        log_force(save_folder, forces, Vv, h[len(h)//2], t_current)
-        print(f"{time.asctime()} -> t={t_current*1e3:.1f} ms | H={h[len(h)//2]*1e6:.1f} um | Vz={Vv[2]*1e3:.1f} mm/s | nfev={sol.nfev}")
+        log_force(save_folder, forces, Vv, h[mid_ind], t_current)
+        print(f"{time.asctime()} -> t={t_current*1e3:.1f} ms | H={h[mid_ind]*1e6:.1f} um | Vz={Vv[2]*1e3:.1f} mm/s | nfev={sol.nfev}")
         # release memory after saving the state
         del sol
         gc.collect()
