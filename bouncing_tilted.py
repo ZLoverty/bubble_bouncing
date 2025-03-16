@@ -58,6 +58,7 @@ import pdb
 import gc
 import pandas as pd
 from scipy.sparse import diags, kron, identity
+import shutil
 
 def film_drainage(t, state):
     """
@@ -149,7 +150,7 @@ def compute_force(state, t, p, dhdx):
 
 def save_state(save_folder, t_current, h, V):
     """ Save surface shape h and velocity V data to files. The folder structure resembles that of OpenFOAM, where each time step is saved in a separate folder.  """
-    save_subfolder = os.path.join(save_folder, f"{t_current:.6f}")
+    save_subfolder = os.path.join(save_folder, f"{t_current:.4f}")
     os.makedirs(save_subfolder, exist_ok=True)
     np.savetxt(os.path.join(save_subfolder, "h.txt"), h.reshape(N, N))
     np.savetxt(os.path.join(save_subfolder, "V.txt"), np.array((V,)))
@@ -158,8 +159,8 @@ def load_state(load_folder):
     """ Load h and V data from the largest time step. """
     sfL = next(os.walk(load_folder))[1]
     t_current = max(float(sf) for sf in sfL)
-    h_file = os.path.join(load_folder, f"{t_current:.6f}", "h.txt")
-    V_file = os.path.join(load_folder, f"{t_current:.6f}", "V.txt")
+    h_file = os.path.join(load_folder, f"{t_current:.4f}", "h.txt")
+    V_file = os.path.join(load_folder, f"{t_current:.4f}", "V.txt")
 
     h = np.loadtxt(h_file) if os.path.exists(h_file) else None
     V = np.loadtxt(V_file) if os.path.exists(V_file) else None
@@ -214,18 +215,62 @@ def args_to_dict(args):
     }
     return initial_params
 
-def jacobian(t, y):
-    # Sparse matrix example, assuming a simple system
-    # This is just an example, you can adapt it to your problem
-    diag_values = [1, -1, 0, 1]  # Example diagonals
-    matrix = diags(diag_values, [0, 1, -1, 2], shape=(len(y), len(y)))
-    return matrix
+def create_gradient_operator(N, dx):
+    # Define finite difference gradient operators (sparse matrix)
+    global Gx, Gy, G2x, G2y, L2D
+    # 1D first derivative operator (2nd order accuracy)
+    Dx = diags([-1, 1], [-1, 1], shape=(N, N))
+    Dx = Dx.toarray()
+    Dx[0, :3] = [-3, 4, -1]
+    Dx[-1, -3:] = [1, -4, 3]
+    Dx /= 2*dx
+    # 1D first derivative operator (4th order accuracy)
+    # Dx = diags([1, -8, 8,-1], [-2, -1, 1, 2], shape=(N, N))
+    # Dx = Dx.toarray()
+    # Dx[0, :5] = [-25, 48, -36, 16, -3]
+    # Dx[1, :6] = [0, -25, 48, -36, 16, -3]
+    # Dx[-2, -6:] = [3, -16, 36, -48, 25, 0]
+    # Dx[-1, -5:] = [3, -16, 36, -48, 25]
+    # Dx /= 12*dx
+    # 1D second derivative operator (2nd order accuracy)
+    D2x = diags([1, -2, 1], [-1, 0, 1], shape=(N, N))
+    D2x = D2x.toarray()
+    D2x[0, :4] = [2, -5, 4, -1]
+    D2x[-1, -4:] = [-1, 4, -5, 2]
+    D2x /= dx**2
+    # 1D second derivative operator (4th order accuracy)
+    # D2x = diags([-1, 16, -30, 16, -1], [-2, -1, 0, 1, 2], shape=(N, N))
+    # D2x = D2x.toarray()
+    # D2x[0 ,   :6 ] = [45 , -154 , 214 , -156 ,   61, -10]
+    # D2x[1 ,  :7 ] = [0, 45 , -154 , 214 , -156 ,   61, -10]
+    # D2x[-2, -7:] = [-10, 61   , -156, 214  , -154,  45, 0]
+    # D2x[-1, -6:  ] = [-10, 61   , -156, 214  , -154,  45]
+    # D2x /= 12*dx**2
+    # 1st and 2nd order derivative operators
+    eye = identity(N)
+    Gx = kron(eye, Dx)
+    Gy = kron(Dx, eye)
+    G2x = kron(eye, D2x)
+    G2y = kron(D2x, eye)
+    # 2D Laplacian operator
+    L2D = G2x + G2y
+
+def event_print(t, y):
+    global last_print_time  # Declare it as global
+    if t - last_print_time >= print_interval:
+        last_print_time = t
+        h, V = y[:-3], y[-3:]
+        print(f"{time.asctime()} -> t={t*1e3:.1f} ms | H={h[mid_ind]*1e6:.1f} um | Vz={V[2]*1e3:.1f} mm/s")
+        save_state(save_folder, t, h, V)
+    return 1  # Always return non-zero to avoid terminating
 
 def main(args):
     # define constants as globals, to avoid passing too many arguments
     ########################################################################################
-    global x, y, dx, dy, N, R, mu, gv, sigma, rho, w, theta, edge_ind, inertia_coef, mid_ind
+    global x, y, dx, dy, N, R, mu, gv, sigma, rho, w, theta, edge_ind, inertia_coef, mid_ind, last_print_time, print_interval, save_folder
+    last_print_time = 0.0
     ########################################################################################
+    
     save_folder = args.save_folder
     load_folder = args.load_folder
 
@@ -281,46 +326,8 @@ def main(args):
     inertia_coef = 4 / 3 * np.pi * rho * R**3
     gv = np.array([-g*np.sin(theta/180*np.pi), 0, g*np.cos(theta/180*np.pi)])
 
-    # Define finite difference gradient operators (sparse matrix)
-    global Gx, Gy, G2x, G2y, L2D
-    # 1D first derivative operator (2nd order accuracy)
-    # Dx = diags([-1, 1], [-1, 1], shape=(N, N))
-    # Dx = Dx.toarray()
-    # Dx[0, :3] = [-3, 4, -1]
-    # Dx[-1, -3:] = [1, -4, 3]
-    # Dx /= 2*dx
-    # 1D first derivative operator (4th order accuracy)
-    Dx = diags([1, -8, 8,-1], [-2, -1, 1, 2], shape=(N, N))
-    Dx = Dx.toarray()
-    Dx[0, :5] = [-25, 48, -36, 16, -3]
-    Dx[1, :6] = [0, -25, 48, -36, 16, -3]
-    Dx[-2, -6:] = [3, -16, 36, -48, 25, 0]
-    Dx[-1, -5:] = [3, -16, 36, -48, 25]
-    Dx /= 12*dx
-    # 1D second derivative operator (2nd order accuracy)
-    D2x = diags([1, -2, 1], [-1, 0, 1], shape=(N, N))
-    D2x = D2x.toarray()
-    D2x[0, :4] = [2, -5, 4, -1]
-    D2x[-1, -4:] = [-1, 4, -5, 2]
-    D2x /= dx**2
-    # 1D second derivative operator (4th order accuracy)
-    # D2x = diags([-1, 16, -30, 16, -1], [-2, -1, 0, 1, 2], shape=(N, N))
-    # D2x = D2x.toarray()
-    # D2x[0 ,   :6 ] = [45 , -154 , 214 , -156 ,   61, -10]
-    # D2x[1 ,  :7 ] = [0, 45 , -154 , 214 , -156 ,   61, -10]
-    # D2x[-2, -7:] = [-10, 61   , -156, 214  , -154,  45, 0]
-    # D2x[-1, -6:  ] = [-10, 61   , -156, 214  , -154,  45]
-    # D2x /= 12*dx**2
-    # 1st and 2nd order derivative operators
-    eye = identity(N)
-    Gx = kron(eye, Dx)
-    Gy = kron(Dx, eye)
-    G2x = kron(eye, D2x)
-    G2y = kron(D2x, eye)
-    # 2D Laplacian operator
-    L2D = G2x + G2y
+    create_gradient_operator(N, dx)
 
-    
     # prints start message
     print(f"Bubble R={R*1e3:.2f} mm is released !")
     start_message = "Simulation begins at {}".format(time.asctime())
@@ -329,36 +336,33 @@ def main(args):
     # compute simulation time steps and save time steps
     nSave = np.floor((T-t_current) / save_time).astype("int")
     t_eval = np.linspace(t_current, T, num=nSave)
+    print_interval = t_eval[1] - t_eval[0]
+
     state = np.append(h, Vv)
 
     # print the initial state
     print(f"{time.asctime()} -> t={t_current*1e3:.1f} ms | H={h[X.shape[0]//2, X.shape[1]//2]*1e6:.1f} um | Vz={Vv[2]*1e3:.1f} mm/s")
     
+    sol = integrate.solve_ivp(film_drainage, [t_current, T], state, \
+        t_eval=t_eval, atol=1e-6, rtol=1e-3, method="BDF", first_step=3e-6, events=event_print)
 
-    # break the integration into small steps
-    for i in range(nSave-1):
-        t_previous = t_eval[i]
-        t_current = t_eval[i+1]
-        # pdb.set_trace()
-        sol = integrate.solve_ivp(film_drainage, [t_previous, t_current], state, \
-            t_eval=[t_current], atol=1e-6, rtol=1e-3, method="BDF")
-
-        # solver error handler
-        try:
-            state = sol.y[:, -1]
-        except:
-            print(f"Error in integration: {sol.message}")
-            break
-
-        h, Vv = state[:-3], state[-3:]
-        save_state(save_folder, t_current, h, Vv)
-        p = YL_equation(h)
-        forces = compute_force(state, sol.t[-1], p, Gx @ h)
-        log_force(save_folder, forces, Vv, h[mid_ind], t_current)
-        print(f"{time.asctime()} -> t={t_current*1e3:.1f} ms | H={h[mid_ind]*1e6:.1f} um | Vz={Vv[2]*1e3:.1f} mm/s | nfev={sol.nfev}")
-        # release memory after saving the state
-        del sol
-        gc.collect()
+    # Save data at the last time step
+    if sol.success:
+        # force remove all the subfolders (since we will generate a more evenly spaced time step)
+        sfL = next(os.walk(save_folder))[1]
+        for sf in sfL:
+            sf_path = os.path.join(save_folder, sf)
+            if os.path.exists(sf_path):                
+                shutil.rmtree(sf_path)
+        for i in range(len(sol.t)):
+            t = sol.t[i]
+            state = sol.y[:, i]
+            h, Vv = state[:-3], state[-3:]
+            save_state(save_folder, t, h, Vv)
+            p = YL_equation(h)
+            forces = compute_force(state, t, p, Gx @ h)
+            log_force(save_folder, forces, Vv, h[mid_ind], t_current)
+        
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="bouncing_simulation", description="Simulate the evolution of the liquid film between a solid substrate and an air bubble.")
