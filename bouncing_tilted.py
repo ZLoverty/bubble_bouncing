@@ -85,7 +85,7 @@ def film_drainage(t, state):
     dhdt[edge_ind] = V[2]
 
     # force balance model to obtain next velocity dVdt
-    buoyancy, drag, amf2, tff, Cm, sound = compute_force(state, t, p, dhdx)
+    buoyancy, drag, amf2, tff, Cm, sound = compute_force(t, state)
     dVdt = (buoyancy + drag + amf2 + tff + sound) / (inertia_coef * Cm)
 
     return np.append(dhdt, dVdt)
@@ -99,7 +99,7 @@ def YL_equation(h):
     return p
 
 
-def compute_force(state, t, p, dhdx):
+def compute_force(t, state):
     # X, Y = np.meshgrid(x, y)
     # dx = (X[1:-1, 2:  ] - X[1:-1,  :-2]) / 2
 
@@ -121,16 +121,19 @@ def compute_force(state, t, p, dhdx):
     else:
         drag = - 48 * G * (1 + K / Re**0.5) * np.pi / 4 * mu * R * V
 
-    # zeta = (H + R) / R
-    # Cm = 0.5 + 0.19222 * zeta**-3.019 + 0.06214 * zeta**-8.331 + 0.0348 * zeta**-24.65 + 0.0139 * zeta**-120.7
+    zeta = (H + R) / R
+    Cm = 0.5 + 0.19222 * zeta**-3.019 + 0.06214 * zeta**-8.331 + 0.0348 * zeta**-24.65 + 0.0139 * zeta**-120.7
     # dCmdH = (-3.019*0.19222 * zeta**-4.019 - 8.331*0.06214 * zeta**-9.331 - 24.65*0.0348 * zeta**-25.65 - 120.7*0.0139 * zeta**-121.7) / R
     # amf2 = 2/3 * np.pi * R**3 * rho * dCmdH * V**2
 
-    Cm = 0.5
+    # Cm = 0.5
     amf2 = np.array([0, 0, 0])
 
+    p = YL_equation(h)
+    dhdx = Gx @ h
+
     # thin film force x-component
-    tffx = np.sum(p*dhdx) * dx**2
+    tffx = - np.sum(p*dhdx) * dx**2
 
     # thin film force z-component
     tffz = np.sum(p) * dx**2
@@ -262,6 +265,8 @@ def event_print(t, y):
         h, V = y[:-3], y[-3:]
         print(f"{time.asctime()} -> t={t*1e3:.1f} ms | H={h[mid_ind]*1e6:.1f} um | Vz={V[2]*1e3:.1f} mm/s")
         save_state(save_folder, t, h, V)
+        forces = compute_force(t, y)
+        log_force(save_folder, forces, V, h[mid_ind], t)
     return 1  # Always return non-zero to avoid terminating
 
 def main(args):
@@ -273,6 +278,10 @@ def main(args):
     
     save_folder = args.save_folder
     load_folder = args.load_folder
+
+    # check if the save folder exists, if yes, remove it
+    if os.path.exists(save_folder):
+        shutil.rmtree(save_folder)
 
     if load_folder is None:
         # initialize 
@@ -343,9 +352,14 @@ def main(args):
     # print the initial state
     print(f"{time.asctime()} -> t={t_current*1e3:.1f} ms | H={h[X.shape[0]//2, X.shape[1]//2]*1e6:.1f} um | Vz={Vv[2]*1e3:.1f} mm/s")
     
-    sol = integrate.solve_ivp(film_drainage, [t_current, T], state, \
-        t_eval=t_eval, atol=1e-6, rtol=1e-3, method="BDF", first_step=3e-6, events=event_print)
+    t1 = time.time()
 
+    sol = integrate.solve_ivp(film_drainage, [t_current, T], state, \
+        t_eval=t_eval, atol=1e-6, rtol=1e-6, method="BDF", events=event_print)
+    
+    t2 = time.time()
+
+    print(f"Simulation time: {t2 - t1:.1f} s")
     # Save data at the last time step
     if sol.success:
         # force remove all the subfolders (since we will generate a more evenly spaced time step)
@@ -360,8 +374,8 @@ def main(args):
             h, Vv = state[:-3], state[-3:]
             save_state(save_folder, t, h, Vv)
             p = YL_equation(h)
-            forces = compute_force(state, t, p, Gx @ h)
-            log_force(save_folder, forces, Vv, h[mid_ind], t_current)
+            forces = compute_force(t, state)
+            log_force(save_folder, forces, Vv, h[mid_ind], t)
         
 
 if __name__ == "__main__":
