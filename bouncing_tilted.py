@@ -44,7 +44,7 @@ Jul 25, 2024: Initial commit.
 Aug 12, 2024: (i) Add the ability to output information during the simulation; (ii) Add the ability to load initial state from a folder. (iii) Force garbage collection after each time step.
 Mar 13, 2025: (i) If `args.freq` is 0, the script will skip the data reading. This allows testing the code without the data file; (ii) Fix the derivative order, y is row and x is column; (iii) Add thin film force in x.
 Mar 14, 2025: (i) Add an error handler for the solver: if no solution is found, print the error message and break the loop; (ii) Improve print messages to show the time, height and velocity information; (iii) Use numpy.gradient function to do derivatives, instead of writing out slicing explicitly; (iv) Use global variables to avoid passing too many arguments.
-Mar 15, 2025: (i) Use forth order approximation for the derivatives;
+Mar 15, 2025: (i) Use sparse matrix to store gradient operators, this enables efficient large matrix computations; (ii) Use second order accuracy for boundaries; (iii) avoid most reshapes and use flattened 1D arrays in most computations to speed up the computation; (iv) set atol at 1e-6 and rtol at 1e-3 for the balance between speed and convergence. 
 """
 
 import sys
@@ -57,68 +57,43 @@ import time
 import pdb
 import gc
 import pandas as pd
-
+from scipy.sparse import diags, kron, identity
 
 def film_drainage(t, state):
     """
     Compute the time derivative of the film thickness h and the bubble velocity V. The film thickness is represented by a 2D array h, and the bubble velocity is represented by a 1D array V. The film thickness `h` and bubble velocity `V` are reshaped into a 1D array `state`. The film thickness is solved by the coupled equations of Stokes-Reynolds equation and Young-Laplace equation, and the bubble velocity is solved by the force balance equation. 
     """
-    # X, Y = np.meshgrid(x, y)
-
     # break the state into h and V
-    h = state[:-3].reshape(dx.shape)
+    h = state[:-3]
     V = state[-3:]
-
-    # compute differential spaces
-    # dy = np.gradient(Y, axis=0, edge_order=2)
-    # dx = np.gradient(X, axis=1, edge_order=2)
     
+    # compute pressure field
     p = YL_equation(h)
-
-    # velocity boundary conditions
-    dhdt = np.zeros_like(h)
     
     # Stokes-Reynolds equation
-    dhdy = np.gradient(h, axis=0, edge_order=2) / dy 
-    dpdy = np.gradient(p, axis=0, edge_order=2) / dy
-    d2pdy = np.gradient(dpdy, axis=0, edge_order=2) / dy
-    dhdx = np.gradient(h, axis=1, edge_order=2) / dx 
-    dpdx = np.gradient(p, axis=1, edge_order=2) / dx
-    d2pdx = np.gradient(dpdx, axis=1, edge_order=2) / dx
+    dhdy = Gy @ h
+    dpdy = Gy @ p
+    d2pdy = G2y @ p
+    dhdx = Gx @ h
+    dpdx = Gx @ p
+    d2pdx = G2x @ p
     dhdt = V[0]*dhdx + V[1]*dhdy + \
         h**2/3/mu * (h*d2pdx + 3*dhdx*dpdx) + \
             h**2/3/mu * (h*d2pdy + 3*dhdy*dpdy)
 
-    dhdt[ : , 0 ] = V[2]
-    dhdt[ : ,-1 ] = V[2]
-    dhdt[ 0 , : ] = V[2]
-    dhdt[-1 , : ] = V[2]
+    dhdt[edge_ind] = V[2]
 
-    # pdb.set_trace()
-    # print(t, p.shape, dhdx.shape)
-    # compute force balance
+    # force balance model to obtain next velocity dVdt
     buoyancy, drag, amf2, tff, Cm, sound = compute_force(state, t, p, dhdx)
-    dVdt = (buoyancy + drag + amf2 + tff + sound) / (4 / 3 * np.pi * rho * R**3 * Cm)
-    # print(V[2])
+    dVdt = (buoyancy + drag + amf2 + tff + sound) / (inertia_coef * Cm)
 
-    return np.append(dhdt.reshape(len(x)*len(y)), dVdt)
+    return np.append(dhdt, dVdt)
 
 def YL_equation(h):
-    # X, Y = np.meshgrid(x, y)
 
-    # compute differential spaces
-    # dy = np.gradient(Y, axis=0, edge_order=2)
-    # dx = np.gradient(X, axis=1, edge_order=2)
+    p = 2 * sigma / R - sigma * (L2D @ h)
 
-    d2hdx = np.gradient(np.gradient(h, axis=1, edge_order=2), axis=1, edge_order=2) / dx**2
-    d2hdy = np.gradient(np.gradient(h, axis=0, edge_order=2), axis=0, edge_order=2) / dy**2
-
-    p = 2 * sigma / R - sigma * d2hdx - sigma * d2hdy
-
-    p[ : , 0 ] = 0 # p[ : , 1 ]
-    p[ : ,-1 ] = 0 # p[ : , -2 ]
-    p[ 0 , : ] = 0 # p[ 1 , : ]
-    p[-1 , : ] = 0 # p[-2 , : ]
+    p[edge_ind] = 0
 
     return p
 
@@ -127,12 +102,11 @@ def compute_force(state, t, p, dhdx):
     # X, Y = np.meshgrid(x, y)
     # dx = (X[1:-1, 2:  ] - X[1:-1,  :-2]) / 2
 
-    h = state[:-3].reshape(dx.shape)
+    h = state[:-3]
     V = state[-3:]
 
-    H = h[h.shape[0]//2, h.shape[1]//2]
-    gv = np.array([-g*np.sin(theta/180*np.pi), 0, g*np.cos(theta/180*np.pi)])
-
+    H = h[len(h)//2]
+    
     buoyancy = -4/3 * np.pi * R**3 * rho * gv
 
     lamb = R * 1.0e3 
@@ -146,26 +120,19 @@ def compute_force(state, t, p, dhdx):
     else:
         drag = - 48 * G * (1 + K / Re**0.5) * np.pi / 4 * mu * R * V
 
-    zeta = (H + R) / R
-    Cm = 0.5 + 0.19222 * zeta**-3.019 + 0.06214 * zeta**-8.331 + 0.0348 * zeta**-24.65 + 0.0139 * zeta**-120.7
+    # zeta = (H + R) / R
+    # Cm = 0.5 + 0.19222 * zeta**-3.019 + 0.06214 * zeta**-8.331 + 0.0348 * zeta**-24.65 + 0.0139 * zeta**-120.7
     # dCmdH = (-3.019*0.19222 * zeta**-4.019 - 8.331*0.06214 * zeta**-9.331 - 24.65*0.0348 * zeta**-25.65 - 120.7*0.0139 * zeta**-121.7) / R
     # amf2 = 2/3 * np.pi * R**3 * rho * dCmdH * V**2
 
-    # Cm = 0.5
+    Cm = 0.5
     amf2 = np.array([0, 0, 0])
 
     # thin film force x-component
-    # p = YL_equation(h, x, y, sigma, R)
-    # dhdx = (h[1:-1, 2:] - h[1:-1, :-2]) / dx / 2
-    # pdhdx = np.zeros_like(p)
-    # pdhdx[1:-1, 1:-1] = p[1:-1, 1:-1] * dhdx
-    # pdb.set_trace()
-    tffx_tmp = integrate.trapezoid(p*dhdx, x=x, axis=0)
-    tffx = integrate.trapezoid(tffx_tmp, x=y, axis=0)
+    tffx = np.sum(p*dhdx) * dx**2
 
     # thin film force z-component
-    tffz_tmp = integrate.trapezoid(p, x=x, axis=0)
-    tffz = integrate.trapezoid(tffz_tmp, x=y, axis=0)
+    tffz = np.sum(p) * dx**2
 
     tff = np.array([tffx, 0, tffz])
 
@@ -184,7 +151,7 @@ def save_state(save_folder, t_current, h, V):
     """ Save surface shape h and velocity V data to files. The folder structure resembles that of OpenFOAM, where each time step is saved in a separate folder.  """
     save_subfolder = os.path.join(save_folder, f"{t_current:.6f}")
     os.makedirs(save_subfolder, exist_ok=True)
-    np.savetxt(os.path.join(save_subfolder, "h.txt"), h)
+    np.savetxt(os.path.join(save_subfolder, "h.txt"), h.reshape(N, N))
     np.savetxt(os.path.join(save_subfolder, "V.txt"), np.array((V,)))
 
 def load_state(load_folder):
@@ -247,9 +214,11 @@ def args_to_dict(args):
     }
     return initial_params
 
-#@profile
 def main(args):
-    global x, y, dx, dy, R, mu, g, sigma, rho, w, theta
+    # define constants as globals, to avoid passing too many arguments
+    ############################################################################
+    global x, y, dx, dy, N, R, mu, gv, sigma, rho, w, theta, edge_ind, inertia_coef
+    #############################################################################
     save_folder = args.save_folder
     load_folder = args.load_folder
 
@@ -263,17 +232,20 @@ def main(args):
         rm = rm * R
         x = np.linspace(-rm, rm, num=N)
         y = np.linspace(-rm, rm, num=N)
-
         X, Y = np.meshgrid(x, y)
-        dx = np.gradient(X, axis=1, edge_order=2)
-        dy = np.gradient(Y, axis=0, edge_order=2) 
+        dx = x[1] - x[0]
+
         # initial state
         t_current = 0 
         h = H0 + (X**2 + Y**2) / R / 2
         V = initial_params["V0"]
         theta = initial_params["theta"]
-
         Vv = np.array([-V*np.sin(theta/180*np.pi), 0, V*np.cos(theta/180*np.pi)])
+
+        # create an array to mark edge indices
+        edge_ind = np.zeros_like(h, dtype=bool)
+        edge_ind[:, 0], edge_ind[:, -1], edge_ind[0, :], edge_ind[-1, :] = True, True, True, True
+        edge_ind = edge_ind.flatten()
 
         # save initial state to file
         save_state(save_folder, t_current, h, V)
@@ -296,6 +268,32 @@ def main(args):
     sigma = initial_params["sigma"]
     rho = initial_params["rho"]
     w = initial_params["freq"]
+    inertia_coef = 4 / 3 * np.pi * rho * R**3
+    gv = np.array([-g*np.sin(theta/180*np.pi), 0, g*np.cos(theta/180*np.pi)])
+
+    # Define finite difference gradient operators (sparse matrix)
+    global Gx, Gy, G2x, G2y, L2D
+    # 1D first derivative operator (gradient)
+    Dx = diags([-1, 1], [-1, 1], shape=(N, N))
+    Dx = Dx.toarray()
+    Dx[0, :3] = [-3, 4, -1]
+    Dx[-1, -3:] = [1, -4, 3]
+    Dx /= 2*dx
+    # Dy = diags([-1, 1], [-1, 1], shape=(N, N)) / dy
+    # 1D second derivative operator (Laplacian)
+    D2x = diags([1, -2, 1], [-1, 0, 1], shape=(N, N))
+    D2x = D2x.toarray()
+    D2x[0, :4] = [-2, 5, -4, 1]
+    D2x[-1, -4:] = [-1, 4, -5, 2]
+    D2x /= dx**2
+    # 1st and 2nd order derivative operators
+    eye = identity(N)
+    Gx = kron(eye, Dx)
+    Gy = kron(Dx, eye)
+    G2x = kron(eye, D2x)
+    G2y = kron(D2x, eye)
+    # 2D Laplacian operator
+    L2D = G2x + G2y
 
     
     # Summarize initial conditions
@@ -315,7 +313,7 @@ def main(args):
         t_current = t_eval[i+1]
         # pdb.set_trace()
         sol = integrate.solve_ivp(film_drainage, [t_previous, t_current], state, \
-            t_eval=[t_current], atol=1e-9, rtol=1e-9, method="BDF")
+            t_eval=[t_current], atol=1e-6, rtol=1e-3, method="BDF")
 
         # solver error handler
         try:
@@ -324,27 +322,15 @@ def main(args):
             print(f"Error in integration: {sol.message}")
             break
 
-        h, Vv = state[:-3].reshape(X.shape), state[-3:]
+        h, Vv = state[:-3], state[-3:]
         save_state(save_folder, t_current, h, Vv)
         p = YL_equation(h)
-        dhdx = np.gradient(h, axis=1, edge_order=2) / dx 
-        forces = compute_force(state, sol.t[-1], p, dhdx)
-        log_force(save_folder, forces, Vv, h[X.shape[0]//2, X.shape[1]//2], t_current)
-        print(f"{time.asctime()} -> t={t_current*1e3:.1f} ms | H={h[X.shape[0]//2, X.shape[1]//2]*1e6:.1f} um | Vz={Vv[2]*1e3:.1f} mm/s")
+        forces = compute_force(state, sol.t[-1], p, Gx @ h)
+        log_force(save_folder, forces, Vv, h[len(h)//2], t_current)
+        print(f"{time.asctime()} -> t={t_current*1e3:.1f} ms | H={h[len(h)//2]*1e6:.1f} um | Vz={Vv[2]*1e3:.1f} mm/s | nfev={sol.nfev}")
         # release memory after saving the state
         del sol
         gc.collect()
-
-    # t2 = time.monotonic()
-    # for i in range(len(sol.t)):
-    #     h, Vv = sol.y[:-3, i], sol.y[-3:, i]
-    #     save_state(save_folder, sol.t[i], h, Vv)
-    #     forces = compute_force(sol.y[:, i], x, y, R=R, rho=rho, g=g, mu=mu, sigma=sigma, theta=theta)
-    #     log_force(save_folder, forces, Vv, h[len(h)//2], sol.t[i])
-    # t3 = time.monotonic()
-    # print("End at {}".format(time.asctime()))
-    # print("Solving equations takes {:f} seconds".format(t2-t1))
-    # print("Saving data takes {:f} seconds".format(t3-t2))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="bouncing_simulation", description="Simulate the evolution of the liquid film between a solid substrate and an air bubble.")
