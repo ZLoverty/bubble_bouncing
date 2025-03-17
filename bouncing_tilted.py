@@ -19,11 +19,11 @@ optional arguments:
     -H, --H0 : initial separation (m), default to 1e-3
     -V, --V0 : initial velocity (m/s), default to -0.3
     -R, --radius : bubble radius (m), default to 6e-4
-    -A, --angle : tilted angle of the solid surface (deg)
+    -A, --angle : tilted angle of the solid surface (deg), default to 22.5
 
 # simulation parameters
     -T, --time : total time of the simulation (s), default to 0.02
-    -N, --number : number of spatial discretization, default to 100
+    -N, --number : number of spatial discretization points, default to 50
     -s, --save_time : Save the states every save_time (s), default to 1e-4
     --rm : the range of film force integration, the fraction of bubble radius R, default to 0.9
     --load_folder: Folder to load initial state from, default to None.
@@ -46,6 +46,7 @@ Mar 13, 2025: (i) If `args.freq` is 0, the script will skip the data reading. Th
 Mar 14, 2025: (i) Add an error handler for the solver: if no solution is found, print the error message and break the loop; (ii) Improve print messages to show the time, height and velocity information; (iii) Use numpy.gradient function to do derivatives, instead of writing out slicing explicitly; (iv) Use global variables to avoid passing too many arguments.
 Mar 15, 2025: (i) Use sparse matrix to store gradient operators, this enables efficient large matrix computations; (ii) Use second order accuracy for boundaries; (iii) avoid most reshapes and use flattened 1D arrays in most computations to speed up the computation; (iv) set atol at 1e-6 and rtol at 1e-3 for the balance between speed and convergence. 
 Mar 16, 2025: (i) Use only one solve_ivp function to speed up the computation; (ii) Print total simulation time. 
+Mar 17, 2025: (i) Updated documentation 
 """
 
 import sys
