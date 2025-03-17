@@ -153,9 +153,11 @@ def compute_force(t, state):
 
     return buoyancy, drag, amf2, tff, Cm, Sv
 
-def save_state(save_folder, t_current, h, V):
+def save_state(t, y):
     """ Save surface shape h and velocity V data to files. The folder structure resembles that of OpenFOAM, where each time step is saved in a separate folder.  """
-    save_subfolder = os.path.join(save_folder, f"{t_current:.4f}")
+    t *= T_scale
+    h, V = y[:-3] * R, y[-3:] * VT
+    save_subfolder = os.path.join(save_folder, f"{t:.4f}")
     os.makedirs(save_subfolder, exist_ok=True)
     np.savetxt(os.path.join(save_subfolder, "h.txt"), h.reshape(N, N))
     np.savetxt(os.path.join(save_subfolder, "V.txt"), np.array((V,)))
@@ -172,15 +174,18 @@ def load_state(load_folder):
 
     return t_current, h, V
 
-def log_force(save_folder, forces, V, H, t_current):
+def log_force(t, y):
     """ need to modify for multi-dimensions """
     force_file = os.path.join(save_folder, "forces.txt")
+    buoyancy, drag, amf2, tff, cm, sound = compute_force(t, y)
+    t *= T_scale
+    h, V = y[:-3] * R, y[-3:] * VT
+    H = h[mid_ind]
     if os.path.exists(force_file) == False:
         with open(force_file, "w") as f:
             f.write("{0:>12s}{1:>12s}{2:>12s}{3:>12s}{4:>12s}{5:>12s}{6:>12s}{7:>12s}{8:>12s}{9:>12s}{10:>12s}{11:>12s}{12:>12s}{13:>12s}{14:>12s}{15:>12s}{16:>12s}\n".format("Time", "Distance", "Velocity_x", "Velocity_y", "Velocity_z", "Buoyancy_x", "Buoyancy_y", "Buoyancy_z", "Drag_x", "Drag_y", "Drag_z", "AMF2_x", "AMF2_y", "AMF2_z", "TFF_x", "TFF_y", "TFF_z"))
     with open(force_file, "a") as f:
-        buoyancy, drag, amf2, tff, cm, sound = forces
-        f.write("{0:12.8f}{1:12.8f}{2:12.8f}{3:12.8f}{4:12.8f}{5:12.8f}{6:12.8f}{7:12.8f}{8:12.8f}{9:12.8f}{10:12.8f}{11:12.8f}{12:12.8f}{13:12.8f}{14:12.8f}{15:12.8f}{16:12.8f}\n".format(t_current, H, *V, *buoyancy, *drag, *amf2, *tff))
+        f.write("{0:12.8f}{1:12.8f}{2:12.8f}{3:12.8f}{4:12.8f}{5:12.8f}{6:12.8f}{7:12.8f}{8:12.8f}{9:12.8f}{10:12.8f}{11:12.8f}{12:12.8f}{13:12.8f}{14:12.8f}{15:12.8f}{16:12.8f}\n".format(t, H, *V, *buoyancy, *drag, *amf2, *tff))
 
 def log_initial_params(args):
     save_folder = args.save_folder
@@ -261,19 +266,18 @@ def precomputes():
 def event_print(t, y):
     global last_print_time  # Declare it as global
     t *= T_scale
+    h, V = y[:-3] * R, y[-3:] * VT
     if t - last_print_time >= print_interval:
         last_print_time = t
-        h, V = y[:-3] * R, y[-3:] * VT
         print(f"{time.asctime()} -> t={t*1e3:.1f} ms | H={h[mid_ind]*1e6:.1f} um | Vz={V[2]*1e3:.1f} mm/s")
-        save_state(save_folder, t, h, V)
-        forces = compute_force(t, y)
-        log_force(save_folder, forces, V, h[mid_ind], t)
+        save_state(t, y)
+        log_force(t, y)
     return 1  # Always return non-zero to avoid terminating
 
 def main(args):
     # define constants as globals, to avoid passing too many arguments
     ########################################################################################
-    global x, y, dx, dy, N, R, mu, gv, sigma, rho, w, theta, edge_ind, mid_ind, last_print_time, print_interval, save_folder, g
+    global dx, N, R, mu, gv, sigma, rho, w, theta, edge_ind, mid_ind, last_print_time, print_interval, save_folder, g
     last_print_time = 0.0
     ########################################################################################
     
@@ -310,11 +314,8 @@ def main(args):
         edge_ind = edge_ind.flatten()
 
         # find midpoint index
-        mid_ind = (N+1)*(N//2)
-
-        # save initial state to file
-        save_state(save_folder, t_current, h, V)
-        log_initial_params(args)
+        mid_ind = (N+1)*(N//2)        
+        
     else:
         # load initial params
         initial_params = load_initial_params(load_folder)
@@ -350,6 +351,10 @@ def main(args):
     print_interval = t_eval[1] - t_eval[0]
 
     state = np.append(h / R, Vv / VT)
+
+    # log the initial state
+    save_state(t_current, state)
+    log_initial_params(args)
 
     # print the initial state
     print(f"{time.asctime()} -> t={t_current*1e3:.1f} ms | H={h[X.shape[0]//2, X.shape[1]//2]*1e6:.1f} um | Vz={Vv[2]*1e3:.1f} mm/s")
