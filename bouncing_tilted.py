@@ -79,21 +79,21 @@ def film_drainage(t, state):
     dhdx = Gx @ h
     dpdx = Gx @ p
     d2pdx = G2x @ p
-    dhdt = V[0]*dhdx + V[1]*dhdy + \
-        h**2/3/mu * (h*d2pdx + 3*dhdx*dpdx) + \
-            h**2/3/mu * (h*d2pdy + 3*dhdy*dpdy)
+    dhdt = lub_coef1 * (V[0]*dhdx + V[1]*dhdy) + \
+        lub_coef2 * h**2 * (h*d2pdx + 3*dhdx*dpdx + h*d2pdy + 3*dhdy*dpdy)
 
     dhdt[edge_ind] = V[2]
 
     # force balance model to obtain next velocity dVdt
     buoyancy, drag, amf2, tff, Cm, sound = compute_force(t, state)
-    dVdt = (buoyancy + drag + amf2 + tff + sound) / (inertia_coef * Cm)
+    dVdt = (buoyancy + drag + amf2 + tff + sound) / (inertia_coef * Cm) 
+    dVdt /= VT / T_scale
 
     return np.append(dhdt, dVdt)
 
-def YL_equation(h):
+def YL_equation(h): 
 
-    p = 2 * sigma / R - sigma * (L2D @ h)
+    p = sigma / R / P0 * (2 - L2D @ h)
 
     p[edge_ind] = 0
 
@@ -104,19 +104,20 @@ def compute_force(t, state):
     # X, Y = np.meshgrid(x, y)
     # dx = (X[1:-1, 2:  ] - X[1:-1,  :-2]) / 2
 
-    h = state[:-3]
-    V = state[-3:]
+    h = state[:-3] * R
+    V = state[-3:] * VT
+    t *= T_scale
 
     H = h[mid_ind]
     
-    buoyancy = -4/3 * np.pi * R**3 * rho * gv
+    buoyancy = buo
 
-    lamb = R * 1.0e3 
-    chi = (1 - 1.17 * lamb + 2.74 * lamb**2) / (0.74 + 0.45 * lamb)
-    s = np.arccos(1 / chi)
+    # lamb = R * 1.0e3 
+    # chi = (1 - 1.17 * lamb + 2.74 * lamb**2) / (0.74 + 0.45 * lamb)
+    # s = np.arccos(1 / chi)
     Re = 2 * R * rho * np.linalg.norm(V, 2) / mu
-    G = 1/3 * chi**(4/3) * (chi**2 - 1)**(3/2) * ((chi**2 - 1)**0.5 - (2-chi**2) * s) / (chi**2 * s - (chi**2 - 1)**0.5)**2
-    K = 0.0195 * chi**4 - 0.2134 * chi**3 + 1.7026 * chi**2 - 2.1461 * chi - 1.5732
+    G = 1.39 #1/3 * chi**(4/3) * (chi**2 - 1)**(3/2) * ((chi**2 - 1)**0.5 - (2-chi**2) * s) / (chi**2 * s - (chi**2 - 1)**0.5)**2
+    K = -1.94 # 0.0195 * chi**4 - 0.2134 * chi**3 + 1.7026 * chi**2 - 2.1461 * chi - 1.5732
     if Re == 0:
         drag = np.array([0, 0, 0])
     else:
@@ -130,7 +131,7 @@ def compute_force(t, state):
     # Cm = 0.5
     amf2 = np.array([0, 0, 0])
 
-    p = YL_equation(h)
+    p = YL_equation(h / R) * P0
     dhdx = Gx @ h
 
     # thin film force x-component
@@ -219,7 +220,21 @@ def args_to_dict(args):
     }
     return initial_params
 
-def create_gradient_operator(N, dx):
+def precomputes():
+    """ Precompute coefficients, constants and operators. """
+    # non-dimensionalization coefs
+    global lub_coef1, lub_coef2, P0, VT, T_scale
+    VT = 2 * R**2 * rho * g / 9 / mu
+    T_scale = 2 * R / VT
+    P0 = rho * VT**2
+    lub_coef1 = T_scale / R
+    lub_coef2 = P0 * T_scale / mu / 3
+
+    # constants
+    global inertia_coef, buo
+    inertia_coef = 4 / 3 * np.pi * rho * R**3
+    buo = -4/3 * np.pi * R**3 * rho * gv
+
     # Define finite difference gradient operators (sparse matrix)
     global Gx, Gy, G2x, G2y, L2D
     # 1D first derivative operator (2nd order accuracy)
@@ -227,29 +242,13 @@ def create_gradient_operator(N, dx):
     Dx = Dx.toarray()
     Dx[0, :3] = [-3, 4, -1]
     Dx[-1, -3:] = [1, -4, 3]
-    Dx /= 2*dx
-    # 1D first derivative operator (4th order accuracy)
-    # Dx = diags([1, -8, 8,-1], [-2, -1, 1, 2], shape=(N, N))
-    # Dx = Dx.toarray()
-    # Dx[0, :5] = [-25, 48, -36, 16, -3]
-    # Dx[1, :6] = [0, -25, 48, -36, 16, -3]
-    # Dx[-2, -6:] = [3, -16, 36, -48, 25, 0]
-    # Dx[-1, -5:] = [3, -16, 36, -48, 25]
-    # Dx /= 12*dx
+    Dx /= 2*(dx/R)
     # 1D second derivative operator (2nd order accuracy)
     D2x = diags([1, -2, 1], [-1, 0, 1], shape=(N, N))
     D2x = D2x.toarray()
     D2x[0, :4] = [2, -5, 4, -1]
     D2x[-1, -4:] = [-1, 4, -5, 2]
-    D2x /= dx**2
-    # 1D second derivative operator (4th order accuracy)
-    # D2x = diags([-1, 16, -30, 16, -1], [-2, -1, 0, 1, 2], shape=(N, N))
-    # D2x = D2x.toarray()
-    # D2x[0 ,   :6 ] = [45 , -154 , 214 , -156 ,   61, -10]
-    # D2x[1 ,  :7 ] = [0, 45 , -154 , 214 , -156 ,   61, -10]
-    # D2x[-2, -7:] = [-10, 61   , -156, 214  , -154,  45, 0]
-    # D2x[-1, -6:  ] = [-10, 61   , -156, 214  , -154,  45]
-    # D2x /= 12*dx**2
+    D2x /= (dx/R)**2
     # 1st and 2nd order derivative operators
     eye = identity(N)
     Gx = kron(eye, Dx)
@@ -261,9 +260,10 @@ def create_gradient_operator(N, dx):
 
 def event_print(t, y):
     global last_print_time  # Declare it as global
+    t *= T_scale
     if t - last_print_time >= print_interval:
         last_print_time = t
-        h, V = y[:-3], y[-3:]
+        h, V = y[:-3] * R, y[-3:] * VT
         print(f"{time.asctime()} -> t={t*1e3:.1f} ms | H={h[mid_ind]*1e6:.1f} um | Vz={V[2]*1e3:.1f} mm/s")
         save_state(save_folder, t, h, V)
         forces = compute_force(t, y)
@@ -273,7 +273,7 @@ def event_print(t, y):
 def main(args):
     # define constants as globals, to avoid passing too many arguments
     ########################################################################################
-    global x, y, dx, dy, N, R, mu, gv, sigma, rho, w, theta, edge_ind, inertia_coef, mid_ind, last_print_time, print_interval, save_folder
+    global x, y, dx, dy, N, R, mu, gv, sigma, rho, w, theta, edge_ind, mid_ind, last_print_time, print_interval, save_folder, g
     last_print_time = 0.0
     ########################################################################################
     
@@ -326,17 +326,17 @@ def main(args):
         # load current state t, h, V
         t_current, h, Vv = load_state(load_folder)
 
-    T = initial_params["time"]
+    T = initial_params["time"] 
     save_time = initial_params["save_time"]
     mu = initial_params["mu"]
     g = initial_params["g"]
     sigma = initial_params["sigma"]
     rho = initial_params["rho"]
     w = initial_params["freq"]
-    inertia_coef = 4 / 3 * np.pi * rho * R**3
+    
     gv = np.array([-g*np.sin(theta/180*np.pi), 0, g*np.cos(theta/180*np.pi)])
 
-    create_gradient_operator(N, dx)
+    precomputes()
 
     # prints start message
     print(f"Bubble R={R*1e3:.2f} mm is released !")
@@ -344,11 +344,12 @@ def main(args):
     print("\n".join([start_message, "="*len(start_message)]))
 
     # compute simulation time steps and save time steps
+    T /= T_scale
     nSave = np.floor((T-t_current) / save_time).astype("int")
-    t_eval = np.linspace(t_current, T, num=nSave)
+    t_eval = np.linspace(t_current, T, num=nSave) 
     print_interval = t_eval[1] - t_eval[0]
 
-    state = np.append(h, Vv)
+    state = np.append(h / R, Vv / VT)
 
     # print the initial state
     print(f"{time.asctime()} -> t={t_current*1e3:.1f} ms | H={h[X.shape[0]//2, X.shape[1]//2]*1e6:.1f} um | Vz={Vv[2]*1e3:.1f} mm/s")
@@ -370,9 +371,9 @@ def main(args):
             if os.path.exists(sf_path):                
                 shutil.rmtree(sf_path)
         for i in range(len(sol.t)):
-            t = sol.t[i]
+            t = sol.t[i] * T_scale
             state = sol.y[:, i]
-            h, Vv = state[:-3], state[-3:]
+            h, Vv = state[:-3] * R, state[-3:] * VT
             save_state(save_folder, t, h, Vv)
             p = YL_equation(h)
             forces = compute_force(t, state)
