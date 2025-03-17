@@ -227,7 +227,7 @@ def precomputes():
     VT = 2 * R**2 * rho * g / 9 / mu
     T_scale = 2 * R / VT
     P0 = rho * VT**2
-    lub_coef1 = T_scale / R
+    lub_coef1 = VT * T_scale / R
     lub_coef2 = P0 * T_scale / mu / 3
 
     # constants
@@ -378,6 +378,9 @@ def main(args):
             p = YL_equation(h)
             forces = compute_force(t, state)
             log_force(save_folder, forces, Vv, h[mid_ind], t)
+    else:
+        print(f"Error: {sol.message}")
+        print("Simulation failed.")
         
 
 if __name__ == "__main__":
