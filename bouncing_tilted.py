@@ -366,7 +366,7 @@ def main(args):
             sf_path = os.path.join(save_folder, sf)
             if os.path.exists(sf_path):                
                 shutil.rmtree(sf_path)
-            os.remove(save_folder, "forces.txt")
+        os.remove(os.path.join(save_folder, "forces.txt"))
         for i in range(len(sol.t)):
             t = sol.t[i]
             state = sol.y[:, i]
