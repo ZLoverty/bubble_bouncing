@@ -46,7 +46,7 @@ Mar 13, 2025: (i) If `args.freq` is 0, the script will skip the data reading. Th
 Mar 14, 2025: (i) Add an error handler for the solver: if no solution is found, print the error message and break the loop; (ii) Improve print messages to show the time, height and velocity information; (iii) Use numpy.gradient function to do derivatives, instead of writing out slicing explicitly; (iv) Use global variables to avoid passing too many arguments.
 Mar 15, 2025: (i) Use sparse matrix to store gradient operators, this enables efficient large matrix computations; (ii) Use second order accuracy for boundaries; (iii) avoid most reshapes and use flattened 1D arrays in most computations to speed up the computation; (iv) set atol at 1e-6 and rtol at 1e-3 for the balance between speed and convergence. 
 Mar 16, 2025: (i) Use only one solve_ivp function to speed up the computation; (ii) Print total simulation time. 
-Mar 17, 2025: (i) Updated documentation 
+Mar 17, 2025: (i) Updated documentation; (ii) Unify arguments to (t, state); (iii) Precomputes and simplify equations to speed up the computation; 
 """
 
 import sys
@@ -135,10 +135,10 @@ def compute_force(t, state):
 
     # thin film force x-component
     tffx = - np.sum(p*dhdx) * dx**2
-
+    
     # thin film force z-component
     tffz = np.sum(p) * dx**2
-
+    print(f"dx2: {dx**2:.2e}")
     tff = np.array([tffx, 0, tffz])
 
     def amplitude(w):
@@ -246,8 +246,9 @@ def create_gradient_operator():
     L2D = G2x + G2y
 
 def precomputes():
-    global buo
+    global buo, inertia_coef
     buo = -4/3 * np.pi * R**3 * rho * gv
+    inertia_coef = 4 / 3 * np.pi * rho * R**3
     
 
 def event_print(t, y):
@@ -264,7 +265,7 @@ def event_print(t, y):
 def main(args):
     # define constants as globals, to avoid passing too many arguments
     ########################################################################################
-    global dx, dy, N, R, mu, gv, sigma, rho, w, theta, edge_ind, inertia_coef, mid_ind, last_print_time, print_interval, save_folder
+    global dx, dy, N, R, mu, gv, sigma, rho, w, theta, edge_ind, mid_ind, last_print_time, print_interval, save_folder
     last_print_time = 0.0
     ########################################################################################
     
@@ -273,7 +274,8 @@ def main(args):
 
     # check if the save folder exists, if yes, remove it
     if os.path.exists(save_folder):
-        shutil.rmtree(save_folder)
+        print(f"Folder {save_folder} already exists. Exiting to avoid overwriting data.")
+        sys.exit(1)
     if os.path.exists(save_folder) == False:
         os.makedirs(save_folder)
 
@@ -325,7 +327,7 @@ def main(args):
     sigma = initial_params["sigma"]
     rho = initial_params["rho"]
     w = initial_params["freq"]
-    inertia_coef = 4 / 3 * np.pi * rho * R**3
+    
     gv = np.array([-g*np.sin(theta/180*np.pi), 0, g*np.cos(theta/180*np.pi)])
 
     create_gradient_operator()
