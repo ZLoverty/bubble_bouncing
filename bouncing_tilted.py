@@ -138,7 +138,7 @@ def compute_force(t, state):
     
     # thin film force z-component
     tffz = np.sum(p) * dx**2
-    print(f"dx2: {dx**2:.2e}")
+    
     tff = np.array([tffx, 0, tffz])
 
     def amplitude(w):
