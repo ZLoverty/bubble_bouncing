@@ -105,11 +105,11 @@ def compute_force(t, state):
     # X, Y = np.meshgrid(x, y)
     # dx = (X[1:-1, 2:  ] - X[1:-1,  :-2]) / 2
 
-    h = state[:-3] * R
+    h = state[:-3]
     V = state[-3:] * VT
     t *= T_scale
 
-    H = h[mid_ind]
+    H = h[mid_ind] * R
     
     buoyancy = buo
 
@@ -132,12 +132,12 @@ def compute_force(t, state):
     # Cm = 0.5
     amf2 = np.array([0, 0, 0])
 
-    p = YL_equation(h / R) * P0
+    p = YL_equation(h) * P0
     dhdx = Gx @ h
 
     # thin film force x-component
     tffx = - np.sum(p*dhdx) * dx**2
-
+    # print(f"p={np.mean(p):.2e}")
     # thin film force z-component
     tffz = np.sum(p) * dx**2
 
@@ -231,7 +231,7 @@ def precomputes():
     # non-dimensionalization coefs
     global lub_coef1, lub_coef2, P0, VT, T_scale
     VT = 2 * R**2 * rho * g / 9 / mu
-    T_scale = 2 * R / VT
+    T_scale = R / VT
     P0 = mu * VT / R
     lub_coef1 = VT * T_scale / R
     lub_coef2 = P0 * T_scale / mu / 3
@@ -248,13 +248,13 @@ def precomputes():
     Dx = Dx.toarray()
     Dx[0, :3] = [-3, 4, -1]
     Dx[-1, -3:] = [1, -4, 3]
-    Dx /= 2*(dx/R)
+    Dx = Dx / (2*dx/R)
     # 1D second derivative operator (2nd order accuracy)
     D2x = diags([1, -2, 1], [-1, 0, 1], shape=(N, N))
     D2x = D2x.toarray()
     D2x[0, :4] = [2, -5, 4, -1]
     D2x[-1, -4:] = [-1, 4, -5, 2]
-    D2x /= (dx/R)**2
+    D2x = D2x / (dx/R)**2
     # 1st and 2nd order derivative operators
     eye = identity(N)
     Gx = kron(eye, Dx)
@@ -372,7 +372,7 @@ def main(args):
     t1 = time.time()
 
     sol = integrate.solve_ivp(film_drainage, [t_current, T], state, \
-        t_eval=t_eval, atol=1e-6, rtol=1e-6, method="BDF", events=event_print)
+        t_eval=t_eval, atol=1e-4, rtol=1e-4, method="BDF", events=event_print)
     
     t2 = time.time()
 
@@ -385,6 +385,7 @@ def main(args):
             sf_path = os.path.join(save_folder, sf)
             if os.path.exists(sf_path):                
                 shutil.rmtree(sf_path)
+            os.remove(os.path.join(save_folder, "forces.txt"))
         for i in range(len(sol.t)):
             t = sol.t[i]
             state = sol.y[:, i]
