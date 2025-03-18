@@ -46,6 +46,7 @@ Mar 13, 2025: (i) If `args.freq` is 0, the script will skip the data reading. Th
 Mar 14, 2025: (i) Add an error handler for the solver: if no solution is found, print the error message and break the loop; (ii) Improve print messages to show the time, height and velocity information; (iii) Use numpy.gradient function to do derivatives, instead of writing out slicing explicitly; (iv) Use global variables to avoid passing too many arguments.
 Mar 15, 2025: (i) Use sparse matrix to store gradient operators, this enables efficient large matrix computations; (ii) Use second order accuracy for boundaries; (iii) avoid most reshapes and use flattened 1D arrays in most computations to speed up the computation; (iv) set atol at 1e-6 and rtol at 1e-3 for the balance between speed and convergence. 
 Mar 16, 2025: (i) Use only one solve_ivp function to speed up the computation; (ii) Print total simulation time. 
+Mar 17, 2025: (i) Non-dimensionalize the equations. Now in most functions, the arguments (t, state) are dimensionless, [film_drainage, YL_equation, save_state, log_force, event_print]; (ii) Use (mu * VT / R) as the scale of the pressure; (iii) 
 """
 
 import sys
@@ -160,7 +161,7 @@ def save_state(t, y):
     save_subfolder = os.path.join(save_folder, f"{t:.4f}")
     os.makedirs(save_subfolder, exist_ok=True)
     np.savetxt(os.path.join(save_subfolder, "h.txt"), h.reshape(N, N))
-    np.savetxt(os.path.join(save_subfolder, "V.txt"), np.array((V,)))
+    np.savetxt(os.path.join(save_subfolder, "V.txt"),  np.array((V,)))
 
 def load_state(load_folder):
     """ Load h and V data from the largest time step. """
@@ -231,7 +232,7 @@ def precomputes():
     global lub_coef1, lub_coef2, P0, VT, T_scale
     VT = 2 * R**2 * rho * g / 9 / mu
     T_scale = 2 * R / VT
-    P0 = rho * VT**2
+    P0 = mu * VT / R
     lub_coef1 = VT * T_scale / R
     lub_coef2 = P0 * T_scale / mu / 3
 
@@ -265,14 +266,20 @@ def precomputes():
 
 def event_print(t, y):
     global last_print_time  # Declare it as global
-    t *= T_scale
-    h, V = y[:-3] * R, y[-3:] * VT
+    h, V = y[:-3], y[-3:]
+    # print(f"t={t:f} ms | last_print_time={last_print_time:f} s | print_interval={print_interval:f} s")
     if t - last_print_time >= print_interval:
         last_print_time = t
-        print(f"{time.asctime()} -> t={t*1e3:.1f} ms | H={h[mid_ind]*1e6:.1f} um | Vz={V[2]*1e3:.1f} mm/s")
+        print(f"{time.asctime()} -> t={t*T_scale*1e3:.1f} ms | H={h[mid_ind]*R*1e6:.1f} um | Vz={V[2]*VT*1e3:.1f} mm/s")
         save_state(t, y)
         log_force(t, y)
+        # test_message(y)
     return 1  # Always return non-zero to avoid terminating
+
+def test_message(y):
+    h, V = y[:-3], y[-3:]
+    p = YL_equation(h)
+    print(f"h_mean={np.mean(h):.2f} | V={np.linalg.norm(V, 2):.2f} | p_mean={np.mean(p)*P0:.2f}")
 
 def main(args):
     # define constants as globals, to avoid passing too many arguments
@@ -339,18 +346,21 @@ def main(args):
 
     precomputes()
 
-    # prints start message
-    print(f"Bubble R={R*1e3:.2f} mm is released !")
-    start_message = "Simulation begins at {}".format(time.asctime())
-    print("\n".join([start_message, "="*len(start_message)]))
-
     # compute simulation time steps and save time steps
     T /= T_scale
+    t_current /= T_scale
+    save_time /= T_scale  
     nSave = np.floor((T-t_current) / save_time).astype("int")
-    t_eval = np.linspace(t_current, T, num=nSave) 
-    print_interval = t_eval[1] - t_eval[0]
-
+    t_eval = np.linspace(t_current, T, num=nSave)
+    print_interval = save_time
     state = np.append(h / R, Vv / VT)
+
+    # prints start message
+    print(f"Bubble R={R*1e3:.2f} mm is released !")
+    sim_message = f"Total time: {T*T_scale*1e3:.2f} ms | Save time: {save_time*T_scale*1e3:.2f} ms | Time steps to save: {nSave}"
+    start_message = "Simulation begins at {}".format(time.asctime())
+    print("\n".join([sim_message, start_message, "="*len(start_message)]))
+
 
     # log the initial state
     save_state(t_current, state)
@@ -376,13 +386,10 @@ def main(args):
             if os.path.exists(sf_path):                
                 shutil.rmtree(sf_path)
         for i in range(len(sol.t)):
-            t = sol.t[i] * T_scale
+            t = sol.t[i]
             state = sol.y[:, i]
-            h, Vv = state[:-3] * R, state[-3:] * VT
-            save_state(save_folder, t, h, Vv)
-            p = YL_equation(h)
-            forces = compute_force(t, state)
-            log_force(save_folder, forces, Vv, h[mid_ind], t)
+            save_state(t, state)
+            log_force(t, state)
     else:
         print(f"Error: {sol.message}")
         print("Simulation failed.")
