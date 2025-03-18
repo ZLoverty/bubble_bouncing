@@ -46,7 +46,7 @@ Mar 13, 2025: (i) If `args.freq` is 0, the script will skip the data reading. Th
 Mar 14, 2025: (i) Add an error handler for the solver: if no solution is found, print the error message and break the loop; (ii) Improve print messages to show the time, height and velocity information; (iii) Use numpy.gradient function to do derivatives, instead of writing out slicing explicitly; (iv) Use global variables to avoid passing too many arguments.
 Mar 15, 2025: (i) Use sparse matrix to store gradient operators, this enables efficient large matrix computations; (ii) Use second order accuracy for boundaries; (iii) avoid most reshapes and use flattened 1D arrays in most computations to speed up the computation; (iv) set atol at 1e-6 and rtol at 1e-3 for the balance between speed and convergence. 
 Mar 16, 2025: (i) Use only one solve_ivp function to speed up the computation; (ii) Print total simulation time. 
-Mar 17, 2025: (i) Non-dimensionalize the equations. Now in most functions, the arguments (t, state) are dimensionless, [film_drainage, YL_equation, save_state, log_force, event_print]; (ii) Use (mu * VT / R) as the scale of the pressure; (iii) 
+Mar 17, 2025: (i) Non-dimensionalize the equations. Now in most functions, the arguments (t, state) are dimensionless, [film_drainage, YL_equation, save_state, log_force, event_print]; (ii) Use (mu * VT / R) as the scale of the pressure; (iii) Use (R / VT) as time scale.
 """
 
 import sys
