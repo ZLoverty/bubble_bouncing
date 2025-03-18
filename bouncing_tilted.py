@@ -81,8 +81,7 @@ def film_drainage(t, state):
     dpdx = Gx @ p
     d2pdx = G2x @ p
     dhdt = V[0]*dhdx + V[1]*dhdy + \
-        h**2/3/mu * (h*d2pdx + 3*dhdx*dpdx) + \
-            h**2/3/mu * (h*d2pdy + 3*dhdy*dpdy)
+        h**2/3/mu * (h*d2pdx + 3*dhdx*dpdx + h*d2pdy + 3*dhdy*dpdy)
 
     dhdt[edge_ind] = V[2]
 
@@ -110,7 +109,7 @@ def compute_force(t, state):
 
     H = h[mid_ind]
     
-    buoyancy = -4/3 * np.pi * R**3 * rho * gv
+    buoyancy = buo
 
     lamb = R * 1.0e3 
     chi = (1 - 1.17 * lamb + 2.74 * lamb**2) / (0.74 + 0.45 * lamb)
@@ -153,12 +152,13 @@ def compute_force(t, state):
 
     return buoyancy, drag, amf2, tff, Cm, Sv
 
-def save_state(save_folder, t_current, h, V):
+def save_state(t, state):
     """ Save surface shape h and velocity V data to files. The folder structure resembles that of OpenFOAM, where each time step is saved in a separate folder.  """
-    save_subfolder = os.path.join(save_folder, f"{t_current:.4f}")
+    save_subfolder = os.path.join(save_folder, f"{t:.4f}")
     os.makedirs(save_subfolder, exist_ok=True)
+    h, V = state[:-3], state[-3:]
     np.savetxt(os.path.join(save_subfolder, "h.txt"), h.reshape(N, N))
-    np.savetxt(os.path.join(save_subfolder, "V.txt"), np.array((V,)))
+    np.savetxt(os.path.join(save_subfolder, "V.txt"), V)
 
 def load_state(load_folder):
     """ Load h and V data from the largest time step. """
@@ -172,18 +172,19 @@ def load_state(load_folder):
 
     return t_current, h, V
 
-def log_force(save_folder, forces, V, H, t_current):
+def log_force(t, state):
     """ need to modify for multi-dimensions """
     force_file = os.path.join(save_folder, "forces.txt")
     if os.path.exists(force_file) == False:
         with open(force_file, "w") as f:
             f.write("{0:>12s}{1:>12s}{2:>12s}{3:>12s}{4:>12s}{5:>12s}{6:>12s}{7:>12s}{8:>12s}{9:>12s}{10:>12s}{11:>12s}{12:>12s}{13:>12s}{14:>12s}{15:>12s}{16:>12s}\n".format("Time", "Distance", "Velocity_x", "Velocity_y", "Velocity_z", "Buoyancy_x", "Buoyancy_y", "Buoyancy_z", "Drag_x", "Drag_y", "Drag_z", "AMF2_x", "AMF2_y", "AMF2_z", "TFF_x", "TFF_y", "TFF_z"))
     with open(force_file, "a") as f:
-        buoyancy, drag, amf2, tff, cm, sound = forces
-        f.write("{0:12.8f}{1:12.8f}{2:12.8f}{3:12.8f}{4:12.8f}{5:12.8f}{6:12.8f}{7:12.8f}{8:12.8f}{9:12.8f}{10:12.8f}{11:12.8f}{12:12.8f}{13:12.8f}{14:12.8f}{15:12.8f}{16:12.8f}\n".format(t_current, H, *V, *buoyancy, *drag, *amf2, *tff))
+        buoyancy, drag, amf2, tff, cm, sound = compute_force(t, state)
+        h, V = state[:-3], state[-3:]
+        H = h[mid_ind]
+        f.write("{0:12.8f}{1:12.8f}{2:12.8f}{3:12.8f}{4:12.8f}{5:12.8f}{6:12.8f}{7:12.8f}{8:12.8f}{9:12.8f}{10:12.8f}{11:12.8f}{12:12.8f}{13:12.8f}{14:12.8f}{15:12.8f}{16:12.8f}\n".format(t, H, *V, *buoyancy, *drag, *amf2, *tff))
 
 def log_initial_params(args):
-    save_folder = args.save_folder
     initial_params = args_to_dict(args)
     param_file = os.path.join(save_folder, "initial_params.json")
     with open(param_file, "w") as f:
@@ -220,7 +221,7 @@ def args_to_dict(args):
     }
     return initial_params
 
-def create_gradient_operator(N, dx):
+def create_gradient_operator():
     # Define finite difference gradient operators (sparse matrix)
     global Gx, Gy, G2x, G2y, L2D
     # 1D first derivative operator (2nd order accuracy)
@@ -229,28 +230,12 @@ def create_gradient_operator(N, dx):
     Dx[0, :3] = [-3, 4, -1]
     Dx[-1, -3:] = [1, -4, 3]
     Dx /= 2*dx
-    # 1D first derivative operator (4th order accuracy)
-    # Dx = diags([1, -8, 8,-1], [-2, -1, 1, 2], shape=(N, N))
-    # Dx = Dx.toarray()
-    # Dx[0, :5] = [-25, 48, -36, 16, -3]
-    # Dx[1, :6] = [0, -25, 48, -36, 16, -3]
-    # Dx[-2, -6:] = [3, -16, 36, -48, 25, 0]
-    # Dx[-1, -5:] = [3, -16, 36, -48, 25]
-    # Dx /= 12*dx
     # 1D second derivative operator (2nd order accuracy)
     D2x = diags([1, -2, 1], [-1, 0, 1], shape=(N, N))
     D2x = D2x.toarray()
     D2x[0, :4] = [2, -5, 4, -1]
     D2x[-1, -4:] = [-1, 4, -5, 2]
     D2x /= dx**2
-    # 1D second derivative operator (4th order accuracy)
-    # D2x = diags([-1, 16, -30, 16, -1], [-2, -1, 0, 1, 2], shape=(N, N))
-    # D2x = D2x.toarray()
-    # D2x[0 ,   :6 ] = [45 , -154 , 214 , -156 ,   61, -10]
-    # D2x[1 ,  :7 ] = [0, 45 , -154 , 214 , -156 ,   61, -10]
-    # D2x[-2, -7:] = [-10, 61   , -156, 214  , -154,  45, 0]
-    # D2x[-1, -6:  ] = [-10, 61   , -156, 214  , -154,  45]
-    # D2x /= 12*dx**2
     # 1st and 2nd order derivative operators
     eye = identity(N)
     Gx = kron(eye, Dx)
@@ -260,21 +245,26 @@ def create_gradient_operator(N, dx):
     # 2D Laplacian operator
     L2D = G2x + G2y
 
+def precomputes():
+    global buo
+    buo = -4/3 * np.pi * R**3 * rho * gv
+    
+
 def event_print(t, y):
     global last_print_time  # Declare it as global
     if t - last_print_time >= print_interval:
         last_print_time = t
         h, V = y[:-3], y[-3:]
         print(f"{time.asctime()} -> t={t*1e3:.1f} ms | H={h[mid_ind]*1e6:.1f} um | Vz={V[2]*1e3:.1f} mm/s")
-        save_state(save_folder, t, h, V)
+        save_state(t, y)
         forces = compute_force(t, y)
-        log_force(save_folder, forces, V, h[mid_ind], t)
+        log_force(t, y)
     return 1  # Always return non-zero to avoid terminating
 
 def main(args):
     # define constants as globals, to avoid passing too many arguments
     ########################################################################################
-    global x, y, dx, dy, N, R, mu, gv, sigma, rho, w, theta, edge_ind, inertia_coef, mid_ind, last_print_time, print_interval, save_folder
+    global dx, dy, N, R, mu, gv, sigma, rho, w, theta, edge_ind, inertia_coef, mid_ind, last_print_time, print_interval, save_folder
     last_print_time = 0.0
     ########################################################################################
     
@@ -284,6 +274,8 @@ def main(args):
     # check if the save folder exists, if yes, remove it
     if os.path.exists(save_folder):
         shutil.rmtree(save_folder)
+    if os.path.exists(save_folder) == False:
+        os.makedirs(save_folder)
 
     if load_folder is None:
         # initialize 
@@ -314,7 +306,6 @@ def main(args):
         mid_ind = (N+1)*(N//2)
 
         # save initial state to file
-        save_state(save_folder, t_current, h, V)
         log_initial_params(args)
     else:
         # load initial params
@@ -337,7 +328,8 @@ def main(args):
     inertia_coef = 4 / 3 * np.pi * rho * R**3
     gv = np.array([-g*np.sin(theta/180*np.pi), 0, g*np.cos(theta/180*np.pi)])
 
-    create_gradient_operator(N, dx)
+    create_gradient_operator()
+    precomputes()
 
     # prints start message
     print(f"Bubble R={R*1e3:.2f} mm is released !")
@@ -349,7 +341,9 @@ def main(args):
     t_eval = np.linspace(t_current, T, num=nSave)
     print_interval = t_eval[1] - t_eval[0]
 
+    # save the initial state
     state = np.append(h, Vv)
+    save_state(t_current, state)
 
     # print the initial state
     print(f"{time.asctime()} -> t={t_current*1e3:.1f} ms | H={h[X.shape[0]//2, X.shape[1]//2]*1e6:.1f} um | Vz={Vv[2]*1e3:.1f} mm/s")
@@ -370,14 +364,12 @@ def main(args):
             sf_path = os.path.join(save_folder, sf)
             if os.path.exists(sf_path):                
                 shutil.rmtree(sf_path)
+            os.remove(save_folder, "forces.txt")
         for i in range(len(sol.t)):
             t = sol.t[i]
             state = sol.y[:, i]
-            h, Vv = state[:-3], state[-3:]
-            save_state(save_folder, t, h, Vv)
-            p = YL_equation(h)
-            forces = compute_force(t, state)
-            log_force(save_folder, forces, Vv, h[mid_ind], t)
+            save_state(t, state)
+            log_force(t, state)
         
 
 if __name__ == "__main__":
