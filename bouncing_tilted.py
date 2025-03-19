@@ -61,6 +61,12 @@ import gc
 import pandas as pd
 from scipy.sparse import diags, kron, identity
 import shutil
+import requests
+from io import BytesIO
+
+url = "https://drive.google.com/uc?export=download&id=1n30z7pKo8teNuiyGZgB47zYMqdac278L"
+response = requests.get(url, stream = True)
+df = pd.read_csv(BytesIO(response.content))
 
 def film_drainage(t, state):
     """
@@ -127,7 +133,6 @@ def compute_force(t, state):
     # dCmdH = (-3.019*0.19222 * zeta**-4.019 - 8.331*0.06214 * zeta**-9.331 - 24.65*0.0348 * zeta**-25.65 - 120.7*0.0139 * zeta**-121.7) / R
     # amf2 = 2/3 * np.pi * R**3 * rho * dCmdH * V**2
 
-    # Cm = 0.5
     amf2 = np.array([0, 0, 0])
 
     p = YL_equation(h)
@@ -140,21 +145,15 @@ def compute_force(t, state):
     tffz = np.sum(p) * dx**2
     
     tff = np.array([tffx, 0, tffz])
-
-    def amplitude(w):
-        if w == 0:
-            return 0
-        ampls = pd.read_csv(r"C:\Users\Justi\OneDrive\Cornell\Research.DrJung.Zhengyang\Bubble_cleaning\force_data.csv")
-        return ampls.set_index("freq").loc[w, "force"]
     
-    sound = -1 * amplitude(w) * np.sin(w * t * 2 * np.pi)
+    sound = -1 * ampl * np.sin(w * t * 2 * np.pi)
     Sv = [sound * np.cos(theta * np.pi / 180), 0, sound * np.sin(theta * np.pi / 180)]
 
     return buoyancy, drag, amf2, tff, Cm, Sv
 
 def save_state(t, state):
     """ Save surface shape h and velocity V data to files. The folder structure resembles that of OpenFOAM, where each time step is saved in a separate folder.  """
-    save_subfolder = os.path.join(save_folder, f"{t:.4f}")
+    save_subfolder = os.path.join(save_folder, f"{t:.5f}")
     os.makedirs(save_subfolder, exist_ok=True)
     h, V = state[:-3], state[-3:]
     np.savetxt(os.path.join(save_subfolder, "h.txt"), h.reshape(N, N))
@@ -164,8 +163,8 @@ def load_state(load_folder):
     """ Load h and V data from the largest time step. """
     sfL = next(os.walk(load_folder))[1]
     t_current = max(float(sf) for sf in sfL)
-    h_file = os.path.join(load_folder, f"{t_current:.4f}", "h.txt")
-    V_file = os.path.join(load_folder, f"{t_current:.4f}", "V.txt")
+    h_file = os.path.join(load_folder, f"{t_current:.5f}", "h.txt")
+    V_file = os.path.join(load_folder, f"{t_current:.5f}", "V.txt")
 
     h = np.loadtxt(h_file) if os.path.exists(h_file) else None
     V = np.loadtxt(V_file) if os.path.exists(V_file) else None
@@ -177,12 +176,12 @@ def log_force(t, state):
     force_file = os.path.join(save_folder, "forces.txt")
     if os.path.exists(force_file) == False:
         with open(force_file, "w") as f:
-            f.write("{0:>12s}{1:>12s}{2:>12s}{3:>12s}{4:>12s}{5:>12s}{6:>12s}{7:>12s}{8:>12s}{9:>12s}{10:>12s}{11:>12s}{12:>12s}{13:>12s}{14:>12s}{15:>12s}{16:>12s}\n".format("Time", "Distance", "Velocity_x", "Velocity_y", "Velocity_z", "Buoyancy_x", "Buoyancy_y", "Buoyancy_z", "Drag_x", "Drag_y", "Drag_z", "AMF2_x", "AMF2_y", "AMF2_z", "TFF_x", "TFF_y", "TFF_z"))
+            f.write("{0:>12s}{1:>12s}{2:>12s}{3:>12s}{4:>12s}{5:>12s}{6:>12s}{7:>12s}{8:>12s}{9:>12s}{10:>12s}{11:>12s}{12:>12s}{13:>12s}{14:>12s}{15:>12s}{16:>12s}{17:>12s}{18:>12s}{19:>12s}\n".format("Time", "Distance", "Velocity_x", "Velocity_y", "Velocity_z", "Buoyancy_x", "Buoyancy_y", "Buoyancy_z", "Drag_x", "Drag_y", "Drag_z", "AMF2_x", "AMF2_y", "AMF2_z", "TFF_x", "TFF_y", "TFF_z", "Sound_x", "Sound_y", "Sound_z"))
     with open(force_file, "a") as f:
         buoyancy, drag, amf2, tff, cm, sound = compute_force(t, state)
         h, V = state[:-3], state[-3:]
         H = h[mid_ind]
-        f.write("{0:12.8f}{1:12.8f}{2:12.8f}{3:12.8f}{4:12.8f}{5:12.8f}{6:12.8f}{7:12.8f}{8:12.8f}{9:12.8f}{10:12.8f}{11:12.8f}{12:12.8f}{13:12.8f}{14:12.8f}{15:12.8f}{16:12.8f}\n".format(t, H, *V, *buoyancy, *drag, *amf2, *tff))
+        f.write("{0:12.8f}{1:12.8f}{2:12.8f}{3:12.8f}{4:12.8f}{5:12.8f}{6:12.8f}{7:12.8f}{8:12.8f}{9:12.8f}{10:12.8f}{11:12.8f}{12:12.8f}{13:12.8f}{14:12.8f}{15:12.8f}{16:12.8f}{17:12.8f}{18:12.8f}{19:12.8f}\n".format(t, H, *V, *buoyancy, *drag, *amf2, *tff, *sound))
 
 def log_initial_params(args):
     initial_params = args_to_dict(args)
@@ -246,10 +245,13 @@ def create_gradient_operator():
     L2D = G2x + G2y
 
 def precomputes():
-    global buo, inertia_coef
+    global buo, inertia_coef, ampl
     buo = -4/3 * np.pi * R**3 * rho * gv
     inertia_coef = 4 / 3 * np.pi * rho * R**3
-    
+    url = "https://drive.google.com/uc?export=download&id=1n30z7pKo8teNuiyGZgB47zYMqdac278L"
+    response = requests.get(url, stream = True)
+    ampls = pd.read_csv(BytesIO(response.content)).set_index("freq")
+    ampl = ampls.loc[w, "force"]
 
 def event_print(t, y):
     global last_print_time  # Declare it as global
@@ -353,7 +355,7 @@ def main(args):
     t1 = time.time()
 
     sol = integrate.solve_ivp(film_drainage, [t_current, T], state, \
-        t_eval=t_eval, atol=1e-6, rtol=1e-6, method="BDF", events=event_print)
+        t_eval=t_eval, atol=1e-12, rtol=1e-12, method="BDF", events=event_print)
     
     t2 = time.time()
 
