@@ -47,6 +47,7 @@ Mar 14, 2025: (i) Add an error handler for the solver: if no solution is found, 
 Mar 15, 2025: (i) Use sparse matrix to store gradient operators, this enables efficient large matrix computations; (ii) Use second order accuracy for boundaries; (iii) avoid most reshapes and use flattened 1D arrays in most computations to speed up the computation; (iv) set atol at 1e-6 and rtol at 1e-3 for the balance between speed and convergence. 
 Mar 16, 2025: (i) Use only one solve_ivp function to speed up the computation; (ii) Print total simulation time. 
 Mar 17, 2025: (i) Updated documentation; (ii) Unify arguments to (t, state); (iii) Precomputes and simplify equations to speed up the computation; 
+Mar 19, 2025: (i) Download amplitude data from cloud; (ii) changed time folder formatting to 5 decimal places; (iii) added sound to log_force
 """
 
 import sys
