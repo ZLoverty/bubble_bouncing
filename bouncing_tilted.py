@@ -372,7 +372,7 @@ def main(args):
     t1 = time.time()
 
     sol = integrate.solve_ivp(film_drainage, [t_current, T], state, \
-        t_eval=t_eval, atol=1e-4, rtol=1e-4, method="BDF", events=event_print)
+        t_eval=t_eval,  atol=1e-12, rtol=1e-6, method="LSODA", events=event_print)
     
     t2 = time.time()
 
