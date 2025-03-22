@@ -113,12 +113,7 @@ def compute_force(t, state):
     
     buoyancy = buo
 
-    # lamb = R * 1.0e3 
-    # chi = (1 - 1.17 * lamb + 2.74 * lamb**2) / (0.74 + 0.45 * lamb)
-    # s = np.arccos(1 / chi)
     Re = 2 * R * rho * np.linalg.norm(V, 2) / mu
-    G = 1.39 #1/3 * chi**(4/3) * (chi**2 - 1)**(3/2) * ((chi**2 - 1)**0.5 - (2-chi**2) * s) / (chi**2 * s - (chi**2 - 1)**0.5)**2
-    K = -1.94 # 0.0195 * chi**4 - 0.2134 * chi**3 + 1.7026 * chi**2 - 2.1461 * chi - 1.5732
     if Re == 0:
         drag = np.array([0, 0, 0])
     else:
@@ -143,13 +138,7 @@ def compute_force(t, state):
 
     tff = np.array([tffx, 0, tffz])
 
-    def amplitude(w):
-        if w == 0:
-            return 0
-        ampls = pd.read_csv(r"C:\Users\Justi\OneDrive\Cornell\Research.DrJung.Zhengyang\Bubble_cleaning\force_data.csv")
-        return ampls.set_index("freq").loc[w, "force"]
-    
-    sound = -1 * amplitude(w) * np.sin(w * t * 2 * np.pi)
+    sound = -1 * ampl * np.sin(w * t * 2 * np.pi)
     Sv = [sound * np.cos(theta * np.pi / 180), 0, sound * np.sin(theta * np.pi / 180)]
 
     return buoyancy, drag, amf2, tff, Cm, Sv
@@ -158,7 +147,7 @@ def save_state(t, y):
     """ Save surface shape h and velocity V data to files. The folder structure resembles that of OpenFOAM, where each time step is saved in a separate folder.  """
     t *= T_scale
     h, V = y[:-3] * R, y[-3:] * VT
-    save_subfolder = os.path.join(save_folder, f"{t:.4f}")
+    save_subfolder = os.path.join(save_folder, f"{t:.5f}")
     os.makedirs(save_subfolder, exist_ok=True)
     np.savetxt(os.path.join(save_subfolder, "h.txt"), h.reshape(N, N))
     np.savetxt(os.path.join(save_subfolder, "V.txt"),  np.array((V,)))
@@ -167,8 +156,8 @@ def load_state(load_folder):
     """ Load h and V data from the largest time step. """
     sfL = next(os.walk(load_folder))[1]
     t_current = max(float(sf) for sf in sfL)
-    h_file = os.path.join(load_folder, f"{t_current:.4f}", "h.txt")
-    V_file = os.path.join(load_folder, f"{t_current:.4f}", "V.txt")
+    h_file = os.path.join(load_folder, f"{t_current:.5f}", "h.txt")
+    V_file = os.path.join(load_folder, f"{t_current:.5f}", "V.txt")
 
     h = np.loadtxt(h_file) if os.path.exists(h_file) else None
     V = np.loadtxt(V_file) if os.path.exists(V_file) else None
@@ -184,9 +173,9 @@ def log_force(t, y):
     H = h[mid_ind]
     if os.path.exists(force_file) == False:
         with open(force_file, "w") as f:
-            f.write("{0:>12s}{1:>12s}{2:>12s}{3:>12s}{4:>12s}{5:>12s}{6:>12s}{7:>12s}{8:>12s}{9:>12s}{10:>12s}{11:>12s}{12:>12s}{13:>12s}{14:>12s}{15:>12s}{16:>12s}\n".format("Time", "Distance", "Velocity_x", "Velocity_y", "Velocity_z", "Buoyancy_x", "Buoyancy_y", "Buoyancy_z", "Drag_x", "Drag_y", "Drag_z", "AMF2_x", "AMF2_y", "AMF2_z", "TFF_x", "TFF_y", "TFF_z"))
+            f.write("{0:>12s}{1:>12s}{2:>12s}{3:>12s}{4:>12s}{5:>12s}{6:>12s}{7:>12s}{8:>12s}{9:>12s}{10:>12s}{11:>12s}{12:>12s}{13:>12s}{14:>12s}{15:>12s}{16:>12s}{17:>12s}{18:>12s}{19:>12s}\n".format("Time", "Distance", "Velocity_x", "Velocity_y", "Velocity_z", "Buoyancy_x", "Buoyancy_y", "Buoyancy_z", "Drag_x", "Drag_y", "Drag_z", "AMF2_x", "AMF2_y", "AMF2_z", "TFF_x", "TFF_y", "TFF_z", "Sound_x", "Sound_y", "Sound_z"))
     with open(force_file, "a") as f:
-        f.write("{0:12.8f}{1:12.8f}{2:12.8f}{3:12.8f}{4:12.8f}{5:12.8f}{6:12.8f}{7:12.8f}{8:12.8f}{9:12.8f}{10:12.8f}{11:12.8f}{12:12.8f}{13:12.8f}{14:12.8f}{15:12.8f}{16:12.8f}\n".format(t, H, *V, *buoyancy, *drag, *amf2, *tff))
+        f.write("{0:12.8f}{1:12.8f}{2:12.8f}{3:12.8f}{4:12.8f}{5:12.8f}{6:12.8f}{7:12.8f}{8:12.8f}{9:12.8f}{10:12.8f}{11:12.8f}{12:12.8f}{13:12.8f}{14:12.8f}{15:12.8f}{16:12.8f}\n".format(t, H, *V, *buoyancy, *drag, *amf2, *tff, *sound))
 
 def log_initial_params(args):
     save_folder = args.save_folder
@@ -237,9 +226,15 @@ def precomputes():
     lub_coef2 = P0 * T_scale / mu / 3
 
     # constants
-    global inertia_coef, buo
+    global inertia_coef, buo, G, K
     inertia_coef = 4 / 3 * np.pi * rho * R**3
     buo = -4/3 * np.pi * R**3 * rho * gv
+
+    lamb = R * 1.0e3 
+    chi = (1 - 1.17 * lamb + 2.74 * lamb**2) / (0.74 + 0.45 * lamb)
+    s = np.arccos(1 / chi)
+    G = 1/3 * chi**(4/3) * (chi**2 - 1)**(3/2) * ((chi**2 - 1)**0.5 - (2-chi**2) * s) / (chi**2 * s - (chi**2 - 1)**0.5)**2
+    K = 0.0195 * chi**4 - 0.2134 * chi**3 + 1.7026 * chi**2 - 2.1461 * chi - 1.5732
 
     # Define finite difference gradient operators (sparse matrix)
     global Gx, Gy, G2x, G2y, L2D
@@ -263,6 +258,13 @@ def precomputes():
     G2y = kron(D2x, eye)
     # 2D Laplacian operator
     L2D = G2x + G2y
+
+    # read sound force magnitude
+    global ampl
+    url = "https://drive.google.com/uc?export=download&id=1n30z7pKo8teNuiyGZgB47zYMqdac278L"
+    response = requests.get(url, stream = True)
+    ampls = pd.read_csv(BytesIO(response.content)).set_index("freq")
+    ampl = ampls.loc[w, "force"]
 
 def event_print(t, y):
     global last_print_time  # Declare it as global
