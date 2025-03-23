@@ -61,6 +61,8 @@ import gc
 import pandas as pd
 from scipy.sparse import diags, kron, identity
 import shutil
+import requests
+from io import BytesIO
 
 def film_drainage(t, state):
     """
