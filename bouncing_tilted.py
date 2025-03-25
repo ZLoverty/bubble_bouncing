@@ -162,8 +162,6 @@ def load_state(load_folder):
     t_current = max(float(sf) for sf in sfL)
     h_file = os.path.join(load_folder, f"{t_current:.5f}", "h.txt")
     V_file = os.path.join(load_folder, f"{t_current:.5f}", "V.txt")
-    h_file = os.path.join(load_folder, f"{t_current:.5f}", "h.txt")
-    V_file = os.path.join(load_folder, f"{t_current:.5f}", "V.txt")
 
     h = np.loadtxt(h_file) if os.path.exists(h_file) else None
     V = np.loadtxt(V_file) if os.path.exists(V_file) else None
@@ -179,7 +177,6 @@ def log_force(t, y):
     H = h[mid_ind]
     if os.path.exists(force_file) == False:
         with open(force_file, "w") as f:
-            f.write("{0:>12s}{1:>12s}{2:>12s}{3:>12s}{4:>12s}{5:>12s}{6:>12s}{7:>12s}{8:>12s}{9:>12s}{10:>12s}{11:>12s}{12:>12s}{13:>12s}{14:>12s}{15:>12s}{16:>12s}{17:>12s}{18:>12s}{19:>12s}\n".format("Time", "Distance", "Velocity_x", "Velocity_y", "Velocity_z", "Buoyancy_x", "Buoyancy_y", "Buoyancy_z", "Drag_x", "Drag_y", "Drag_z", "AMF2_x", "AMF2_y", "AMF2_z", "TFF_x", "TFF_y", "TFF_z", "Sound_x", "Sound_y", "Sound_z"))
             f.write("{0:>12s}{1:>12s}{2:>12s}{3:>12s}{4:>12s}{5:>12s}{6:>12s}{7:>12s}{8:>12s}{9:>12s}{10:>12s}{11:>12s}{12:>12s}{13:>12s}{14:>12s}{15:>12s}{16:>12s}{17:>12s}{18:>12s}{19:>12s}\n".format("Time", "Distance", "Velocity_x", "Velocity_y", "Velocity_z", "Buoyancy_x", "Buoyancy_y", "Buoyancy_z", "Drag_x", "Drag_y", "Drag_z", "AMF2_x", "AMF2_y", "AMF2_z", "TFF_x", "TFF_y", "TFF_z", "Sound_x", "Sound_y", "Sound_z"))
     with open(force_file, "a") as f:
         f.write("{0:12.8f}{1:12.8f}{2:12.8f}{3:12.8f}{4:12.8f}{5:12.8f}{6:12.8f}{7:12.8f}{8:12.8f}{9:12.8f}{10:12.8f}{11:12.8f}{12:12.8f}{13:12.8f}{14:12.8f}{15:12.8f}{16:12.8f}{17:12.8f}{18:12.8f}{19:12.8f}\n".format(t, H, *V, *buoyancy, *drag, *amf2, *tff, *sound))
@@ -406,7 +403,6 @@ def main(args):
             sf_path = os.path.join(save_folder, sf)
             if os.path.exists(sf_path):                
                 shutil.rmtree(sf_path)
-        os.remove(os.path.join(save_folder, "forces.txt"))
         os.remove(os.path.join(save_folder, "forces.txt"))
         for i in range(len(sol.t)):
             t = sol.t[i]
