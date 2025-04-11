@@ -123,8 +123,8 @@ def compute_force(t, state):
     else:
         drag = - 48 * G * (1 + K / Re**0.5) * np.pi / 4 * mu * R * V
 
-    zeta = (H + R) / R
-    Cm = 0.5 + 0.19222 * zeta**-3.019 + 0.06214 * zeta**-8.331 + 0.0348 * zeta**-24.65 + 0.0139 * zeta**-120.7
+    #zeta = (H + R) / R
+    Cm = 0.5 #+ 0.19222 * zeta**-3.019 + 0.06214 * zeta**-8.331 + 0.0348 * zeta**-24.65 + 0.0139 * zeta**-120.7
     # dCmdH = (-3.019*0.19222 * zeta**-4.019 - 8.331*0.06214 * zeta**-9.331 - 24.65*0.0348 * zeta**-25.65 - 120.7*0.0139 * zeta**-121.7) / R
     # amf2 = 2/3 * np.pi * R**3 * rho * dCmdH * V**2
 
@@ -390,7 +390,7 @@ def main(args):
     t1 = time.time()
 
     sol = integrate.solve_ivp(film_drainage, [t_current, T], state, \
-        t_eval=t_eval, atol=1e-12, rtol=1e-6, method="BDF", events=event_print)
+        t_eval=t_eval, atol=1e-3, rtol=1e-3, method="LSODA", events=event_print, first_step=1e-3)
     
     t2 = time.time()
 
