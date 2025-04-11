@@ -151,10 +151,9 @@ def save_state(t, y):
     """ Save surface shape h and velocity V data to files. The folder structure resembles that of OpenFOAM, where each time step is saved in a separate folder."""
     t *= T_scale
     h, V = y[:-3] * R, y[-3:] * VT
-    save_subfolder = os.path.join(save_folder, f"{t:.5f}")
-    os.makedirs(save_subfolder, exist_ok=True)
-    np.savetxt(os.path.join(save_subfolder, "h.txt"), h.reshape(N, N))
-    np.savetxt(os.path.join(save_subfolder, "V.txt"),  np.array((V,)))
+    save_file.create_group(f"{t:.5f}")
+    save_file[f"{t:.5f}"]["h"] = h.reshape(N, N)
+    save_file[f"{t:.5f}"]["V"] = V
 
 def load_state(load_folder):
     """ Load h and V data from the largest time step. """
@@ -169,17 +168,16 @@ def load_state(load_folder):
     return t_current, h, V
 
 def log_force(t, y):
-    """ need to modify for multi-dimensions """
-    force_file = os.path.join(save_folder, "forces.txt")
+    """ need to modify for multi-dimensions 
+    columns = ["Time", "Distance", "Velocity_x", "Velocity_y", "Velocity_z", "Buoyancy_x", "Buoyancy_y", "Buoyancy_z", "Drag_x", "Drag_y", "Drag_z", "AMF2_x", "AMF2_y", "AMF2_z", "TFF_x", "TFF_y", "TFF_z", "Sound_x", "Sound_y", "Sound_z"]
+    """
+
     buoyancy, drag, amf2, tff, cm, sound = compute_force(t, y)
     t *= T_scale
     h, V = y[:-3] * R, y[-3:] * VT
     H = h[mid_ind]
-    if os.path.exists(force_file) == False:
-        with open(force_file, "w") as f:
-            f.write("{0:>12s}{1:>12s}{2:>12s}{3:>12s}{4:>12s}{5:>12s}{6:>12s}{7:>12s}{8:>12s}{9:>12s}{10:>12s}{11:>12s}{12:>12s}{13:>12s}{14:>12s}{15:>12s}{16:>12s}{17:>12s}{18:>12s}{19:>12s}\n".format("Time", "Distance", "Velocity_x", "Velocity_y", "Velocity_z", "Buoyancy_x", "Buoyancy_y", "Buoyancy_z", "Drag_x", "Drag_y", "Drag_z", "AMF2_x", "AMF2_y", "AMF2_z", "TFF_x", "TFF_y", "TFF_z", "Sound_x", "Sound_y", "Sound_z"))
-    with open(force_file, "a") as f:
-        f.write("{0:12.8f}{1:12.8f}{2:12.8f}{3:12.8f}{4:12.8f}{5:12.8f}{6:12.8f}{7:12.8f}{8:12.8f}{9:12.8f}{10:12.8f}{11:12.8f}{12:12.8f}{13:12.8f}{14:12.8f}{15:12.8f}{16:12.8f}{17:12.8f}{18:12.8f}{19:12.8f}\n".format(t, H, *V, *buoyancy, *drag, *amf2, *tff, *sound))
+    
+    forces.append([t, H, *V, *buoyancy, *drag, *amf2, *tff, *sound])
 
 def save_initial_params(args):
     initial_params = {
@@ -196,10 +194,13 @@ def save_initial_params(args):
         "N": N,
         "freq": w
     }
-    param_file = os.path.join(save_folder, "initial_params.json")
-    with open(param_file, "w") as f:
-        y = json.dumps(initial_params)
-        f.write(y)
+    for kw in initial_params:
+        save_file["initial_params"][kw] = initial_params[kw]
+    # param_file = os.path.join(save_folder, "initial_params.json")
+    # with open(param_file, "w") as f:
+    #     y = json.dumps(initial_params)
+    #     f.write(y)
+    
 
 def load_initial_params(load_folder):
     """ Load initial params from a json file. """
@@ -330,21 +331,21 @@ def main(args):
     # Define globals
     global R, H0, V0, theta, mu, g, sigma, rho, rm, T, save_time, N, w
     global lub_coef1, lub_coef2, P0, VT, T_scale
-    global save_folder
+    global save_file, forces, dx
     global last_print_time, print_interval
     last_print_time = 0.0
     ########################################################################################
     
     # I/O
-    save_folder = args.save_folder
+    import h5py
+    save_file = h5py.File(args.save_file, "w")
+    save_file.create_group("initial_params")
     load_folder = args.load_folder
 
     if load_folder is None:
         # initial state
-        os.makedirs(save_folder, exist_ok=True)
         read_args(args)
         save_initial_params(args)
-        global dx
         x = np.linspace(-rm*R, rm*R, num=N)
         y = np.linspace(-rm*R, rm*R, num=N)
         X, Y = np.meshgrid(x, y)
@@ -355,14 +356,14 @@ def main(args):
     else:
         # load initial params
         load_initial_params(load_folder)
-        
         x = np.linspace(-rm*R, rm*R, num=N)
         dx = x[1] - x[0]
         # load current state t, h, V
         t_current, h, Vv = load_state(load_folder)
         T = args.time + t_current
     precomputes()
-    
+    forces = [] # initialize forces list
+
     # compute simulation time steps and save time steps (dimensionless)
     T /= T_scale
     t_current /= T_scale
@@ -383,7 +384,6 @@ def main(args):
     # log the initial state
     save_state(t_current, state)
     
-
     # print the initial state
     print(f"{time.asctime()} -> t={t_current*1e3:.1f} ms | H={h.flatten()[mid_ind]*1e6:.1f} um | Vz={Vv[2]*1e3:.1f} mm/s")
     
@@ -397,26 +397,29 @@ def main(args):
     print(f"Simulation time: {t2 - t1:.1f} s")
     # Save data at the last time step
     if sol.success:
-        # force remove all the subfolders (since we will generate a more evenly spaced time step)
-        sfL = next(os.walk(save_folder))[1]
-        for sf in sfL:
-            sf_path = os.path.join(save_folder, sf)
-            if os.path.exists(sf_path):                
-                shutil.rmtree(sf_path)
-        os.remove(os.path.join(save_folder, "forces.txt"))
-        for i in range(len(sol.t)):
-            t = sol.t[i]
-            state = sol.y[:, i]
-            save_state(t, state)
-            log_force(t, state)
+        print("Simulation finished successfully.")
+        save_file["forces"] = np.array(forces)
+    #     # force remove all the subfolders (since we will generate a more evenly spaced time step)
+    #     sfL = next(os.walk(save_folder))[1]
+    #     for sf in sfL:
+    #         sf_path = os.path.join(save_folder, sf)
+    #         if os.path.exists(sf_path):                
+    #             shutil.rmtree(sf_path)
+        # os.remove(os.path.join(save_folder, "forces.txt"))
+        # for i in range(len(sol.t)):
+        #     t = sol.t[i]
+        #     state = sol.y[:, i]
+        #     save_state(t, state)
+        #     log_force(t, state)
     else:
+        save_file["forces"] = np.array(forces)
         print(f"Error: {sol.message}")
         print("Simulation failed.")
-        
+    save_file.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="bouncing_simulation", description="Simulate the evolution of the liquid film between a solid substrate and an air bubble.")
-    parser.add_argument("save_folder", help="Folder to save simulation results.")
+    parser.add_argument("save_file", help="h5 file to save the simulation results.")
     # initial state
     parser.add_argument("-H", "--H0", type=float, default=1.0e-3, help="Initial separation in meters.")
     parser.add_argument("-V", "--V0", type=float, default=-0.3, help="Initial velocity in m/s.")
