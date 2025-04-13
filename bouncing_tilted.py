@@ -151,9 +151,10 @@ def save_state(t, y):
     """ Save surface shape h and velocity V data to files. The folder structure resembles that of OpenFOAM, where each time step is saved in a separate folder."""
     t *= T_scale
     h, V = y[:-3] * R, y[-3:] * VT
-    save_file.create_group(f"{t:.5f}")
-    save_file[f"{t:.5f}"]["h"] = h.reshape(N, N)
-    save_file[f"{t:.5f}"]["V"] = V
+    group_name = f"time_steps/{t:.5f}"
+    save_file.create_group(group_name)
+    save_file[group_name]["h"] = h.reshape(N, N)
+    save_file[group_name]["V"] = V
 
 def load_state(load_folder):
     """ Load h and V data from the largest time step. """
@@ -176,8 +177,10 @@ def log_force(t, y):
     t *= T_scale
     h, V = y[:-3] * R, y[-3:] * VT
     H = h[mid_ind]
-    
-    forces.append([t, H, *V, *buoyancy, *drag, *amf2, *tff, *sound])
+    data_buffer = [t, H, *V, *buoyancy, *drag, *amf2, *tff, *sound]
+    old_size = save_file["forces"].shape[0]
+    save_file["forces"].resize((old_size+1, 20))
+    save_file["forces"][old_size:old_size+1, :] = data_buffer
 
 def save_initial_params(args):
     initial_params = {
@@ -309,12 +312,12 @@ def precomputes():
     ampl = ampls.loc[w, "force"]
 
 def event_print(t, y):
-    global last_print_time  # Declare it as global
+    global last_print_time, last_save_time  # Declare it as global
     h, V = y[:-3], y[-3:]
     # print(f"t={t:f} ms | last_print_time={last_print_time:f} s | print_interval={print_interval:f} s")
-    if t - last_print_time >= print_interval:
+    if t - last_print_time >= print_interval or t == 0:
         last_print_time = t
-        print(f"{time.asctime()} -> t={t*T_scale*1e3:.1f} ms | H={h[mid_ind]*R*1e6:.1f} um | Vz={V[2]*VT*1e3:.1f} mm/s")
+        print(f"{time.asctime()} -> t={t*T_scale*1e3:.2f} ms | H={h[mid_ind]*R*1e6:.1f} um | Vz={V[2]*VT*1e3:.1f} mm/s")
         save_state(t, y)
         log_force(t, y)
         # test_message(y)
@@ -340,6 +343,7 @@ def main(args):
     import h5py
     save_file = h5py.File(args.save_file, "w")
     save_file.create_group("initial_params")
+    save_file.create_dataset("forces", shape=(0, 20), maxshape=(None, 20), dtype="f8")
     load_folder = args.load_folder
 
     if load_folder is None:
@@ -381,16 +385,15 @@ def main(args):
     start_message = "Simulation begins at {}".format(time.asctime())
     print("\n".join([sim_message, start_message, "="*len(start_message)]))
 
-    # log the initial state
-    save_state(t_current, state)
-    
-    # print the initial state
-    print(f"{time.asctime()} -> t={t_current*1e3:.1f} ms | H={h.flatten()[mid_ind]*1e6:.1f} um | Vz={Vv[2]*1e3:.1f} mm/s")
+    # print and save the initial state
+    # event_print(t_current, state)
+
+    # print(f"{time.asctime()} -> t={t_current*1e3:.1f} ms | H={h.flatten()[mid_ind]*1e6:.1f} um | Vz={Vv[2]*1e3:.1f} mm/s")
     
     t1 = time.time()
 
     sol = integrate.solve_ivp(film_drainage, [t_current, T], state, \
-        t_eval=t_eval, atol=1e-3, rtol=1e-3, method="LSODA", events=event_print, first_step=1e-3)
+        t_eval=t_eval, atol=1e-6, rtol=1e-6, method="LSODA", events=event_print, first_step=1e-5)
     
     t2 = time.time()
 
@@ -399,18 +402,6 @@ def main(args):
     if sol.success:
         print("Simulation finished successfully.")
         save_file["forces"] = np.array(forces)
-    #     # force remove all the subfolders (since we will generate a more evenly spaced time step)
-    #     sfL = next(os.walk(save_folder))[1]
-    #     for sf in sfL:
-    #         sf_path = os.path.join(save_folder, sf)
-    #         if os.path.exists(sf_path):                
-    #             shutil.rmtree(sf_path)
-        # os.remove(os.path.join(save_folder, "forces.txt"))
-        # for i in range(len(sol.t)):
-        #     t = sol.t[i]
-        #     state = sol.y[:, i]
-        #     save_state(t, state)
-        #     log_force(t, state)
     else:
         save_file["forces"] = np.array(forces)
         print(f"Error: {sol.message}")
