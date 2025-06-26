@@ -138,7 +138,8 @@ def compute_force(t, state):
     tffz = np.sum(p) * dx**2
     tff = np.array([tffx, 0, tffz])
 
-    # lift force
+    # lift force - Oseen wake
+    
 
 
     # sound force
