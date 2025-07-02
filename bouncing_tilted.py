@@ -50,20 +50,19 @@ Mar 17, 2025: (i) Non-dimensionalize the equations. Now in most functions, the a
 Mar 22, 2025: (i) Implement the new load function; (ii) Adjust the tol parameter.
 """
 
-import sys
 import os
 import numpy as np
 from scipy import integrate
 import argparse
 import json
 import time
-import pdb
-import gc
-import pandas as pd
 from scipy.sparse import diags, kron, identity
 import shutil
-import requests
-from io import BytesIO
+from utils import Sphere
+
+bounce = False # flag to track the first bounce event
+t_bounce = 0 # the dimensional time where the bouncing happens
+v_im = 0 # the velocity at the first bounce, use as a constant velocity for the imaginary bubble
 
 def film_drainage(t, state):
     """
@@ -77,20 +76,20 @@ def film_drainage(t, state):
     p = YL_equation(h)
     
     # Stokes-Reynolds equation
-    dhdy = Gy @ h
-    dpdy = Gy @ p
-    d2pdy = G2y @ p
+    dhdz = Gz @ h
+    dpdz = Gz @ p
+    d2pdz = G2z @ p
     dhdx = Gx @ h
     dpdx = Gx @ p
     d2pdx = G2x @ p
-    dhdt = lub_coef1 * (V[0]*dhdx + V[1]*dhdy) + \
-        lub_coef2 * h**2 * (h*d2pdx + 3*dhdx*dpdx + h*d2pdy + 3*dhdy*dpdy)
+    dhdt = lub_coef1 * (V[0]*dhdx + V[2]*dhdz) + \
+        lub_coef2 * h**2 * (h*d2pdx + 3*dhdx*dpdx + h*d2pdz + 3*dhdz*dpdz)
 
-    dhdt[edge_ind] = V[2]
+    dhdt[edge_ind] = V[1]
 
     # force balance model to obtain next velocity dVdt
-    buoyancy, drag, amf2, tff, Cm, sound = compute_force(t, state)
-    dVdt = (buoyancy + drag + amf2 + tff + sound) / (inertia_coef * Cm) 
+    buoyancy, drag, amf2, tff, Cm = compute_force(t, state)
+    dVdt = (buoyancy + drag + amf2 + tff) / (inertia_coef * Cm) 
     dVdt /= VT / T_scale
 
     return np.append(dhdt, dVdt)
@@ -115,7 +114,6 @@ def compute_force(t, state):
     H = h[mid_ind] * R
     
     buoyancy = buo
-    buoyancy = buo
 
     Re = 2 * R * rho * np.linalg.norm(V, 2) / mu
     if Re == 0:
@@ -126,7 +124,7 @@ def compute_force(t, state):
     zeta = (H + R) / R
     Cm = 0.5 + 0.19222 * zeta**-3.019 + 0.06214 * zeta**-8.331 + 0.0348 * zeta**-24.65 + 0.0139 * zeta**-120.7
     dCmdH = (-3.019*0.19222 * zeta**-4.019 - 8.331*0.06214 * zeta**-9.331 - 24.65*0.0348 * zeta**-25.65 - 120.7*0.0139 * zeta**-121.7) / R
-    amf2 = -2/3 * np.pi * R**3 * rho * dCmdH * V[2] * V
+    amf2 = -2/3 * np.pi * R**3 * rho * dCmdH * V[1] * V
 
     # amf2 = np.array([0, 0, 0])
 
@@ -135,18 +133,25 @@ def compute_force(t, state):
 
     # thin film force x-component
     tffx = - np.sum(p*dhdx) * dx**2
-    tffz = np.sum(p) * dx**2
-    tff = np.array([tffx, 0, tffz])
+    tffy = np.sum(p) * dx**2
+    tff = np.array([tffx, tffy, 0])
 
     # lift force - Oseen wake
+    if H + edge_height <= R and bounce == False:
+        bounce = True
+        v_im = np.linalg(V)
+        t_bounce = t
     
+    if bounce:
+        dt = t - t_bounce
+        im.set_pos()
 
 
     # sound force
-    sound = -1 * ampl * np.sin(w * t * 2 * np.pi)
-    Sv = [sound * np.cos(theta * np.pi / 180), 0, sound * np.sin(theta * np.pi / 180)]
+    # sound = -1 * ampl * np.sin(w * t * 2 * np.pi)
+    # Sv = [sound * np.cos(theta * np.pi / 180), 0, sound * np.sin(theta * np.pi / 180)]
 
-    return buoyancy, drag, amf2, tff, Cm, Sv
+    return buoyancy, drag, amf2, tff, Cm
 
 def save_state(t, y):
     """ Save surface shape h and velocity V data to files. The folder structure resembles that of OpenFOAM, where each time step is saved in a separate folder."""
@@ -172,7 +177,7 @@ def load_state(load_folder):
 def log_force(t, y):
     """ need to modify for multi-dimensions """
     force_file = os.path.join(save_folder, "forces.txt")
-    buoyancy, drag, amf2, tff, cm, sound = compute_force(t, y)
+    buoyancy, drag, amf2, tff, cm = compute_force(t, y)
     t *= T_scale
     h, V = y[:-3] * R, y[-3:] * VT
     H = h[mid_ind]
@@ -180,7 +185,7 @@ def log_force(t, y):
         with open(force_file, "w") as f:
             f.write("{0:>12s}{1:>12s}{2:>12s}{3:>12s}{4:>12s}{5:>12s}{6:>12s}{7:>12s}{8:>12s}{9:>12s}{10:>12s}{11:>12s}{12:>12s}{13:>12s}{14:>12s}{15:>12s}{16:>12s}{17:>12s}{18:>12s}{19:>12s}\n".format("Time", "Distance", "Velocity_x", "Velocity_y", "Velocity_z", "Buoyancy_x", "Buoyancy_y", "Buoyancy_z", "Drag_x", "Drag_y", "Drag_z", "AMF2_x", "AMF2_y", "AMF2_z", "TFF_x", "TFF_y", "TFF_z", "Sound_x", "Sound_y", "Sound_z"))
     with open(force_file, "a") as f:
-        f.write("{0:12.8f}{1:12.8f}{2:12.8f}{3:12.8f}{4:12.8f}{5:12.8f}{6:12.8f}{7:12.8f}{8:12.8f}{9:12.8f}{10:12.8f}{11:12.8f}{12:12.8f}{13:12.8f}{14:12.8f}{15:12.8f}{16:12.8f}{17:12.8f}{18:12.8f}{19:12.8f}\n".format(t, H, *V, *buoyancy, *drag, *amf2, *tff, *sound))
+        f.write("{0:12.8f}{1:12.8f}{2:12.8f}{3:12.8f}{4:12.8f}{5:12.8f}{6:12.8f}{7:12.8f}{8:12.8f}{9:12.8f}{10:12.8f}{11:12.8f}{12:12.8f}{13:12.8f}{14:12.8f}{15:12.8f}{16:12.8f}\n".format(t, H, *V, *buoyancy, *drag, *amf2, *tff))
 
 def save_initial_params(args):
     initial_params = {
@@ -249,7 +254,6 @@ def read_args(args):
 
 def precomputes():
     """ Precompute coefficients, constants and operators. """
-    
 
     # non-dimensionalization coefs
     global lub_coef1, lub_coef2, P0, VT, T_scale
@@ -262,7 +266,7 @@ def precomputes():
     # constants
     global inertia_coef, buo, G, K, edge_ind, mid_ind
     inertia_coef = 4 / 3 * np.pi * rho * R**3
-    gv = np.array([-g*np.sin(theta/180*np.pi), 0, g*np.cos(theta/180*np.pi)])
+    gv = np.array([-g*np.sin(theta/180*np.pi), g*np.cos(theta/180*np.pi), 0])
     buo = -4/3 * np.pi * R**3 * rho * gv
     ## Drag force coefficients
     lamb = R * 1.0e3 
@@ -279,7 +283,7 @@ def precomputes():
     mid_ind = (N+1)*(N//2)   
 
     # Define finite difference gradient operators (sparse matrix)
-    global Gx, Gy, G2x, G2y, L2D
+    global Gx, Gz, G2x, G2z, L2D
     # 1D first derivative operator (2nd order accuracy)
     Dx = diags([-1, 1], [-1, 1], shape=(N, N))
     Dx = Dx.toarray()
@@ -295,18 +299,18 @@ def precomputes():
     # 1st and 2nd order derivative operators
     eye = identity(N)
     Gx = kron(eye, Dx)
-    Gy = kron(Dx, eye)
+    Gz = kron(Dx, eye)
     G2x = kron(eye, D2x)
-    G2y = kron(D2x, eye)
+    G2z = kron(D2x, eye)
     # 2D Laplacian operator
-    L2D = G2x + G2y
+    L2D = G2x + G2z
 
     # read sound force magnitude
-    global ampl
-    url = "https://drive.google.com/uc?export=download&id=1n30z7pKo8teNuiyGZgB47zYMqdac278L"
-    response = requests.get(url, stream = True)
-    ampls = pd.read_csv(BytesIO(response.content)).set_index("freq")
-    ampl = ampls.loc[w, "force"]
+    # global ampl
+    # url = "https://drive.google.com/uc?export=download&id=1n30z7pKo8teNuiyGZgB47zYMqdac278L"
+    # response = requests.get(url, stream = True)
+    # ampls = pd.read_csv(BytesIO(response.content)).set_index("freq")
+    # ampl = ampls.loc[w, "force"]
 
 def event_print(t, y):
     global last_print_time  # Declare it as global
@@ -314,7 +318,7 @@ def event_print(t, y):
     # print(f"t={t:f} ms | last_print_time={last_print_time:f} s | print_interval={print_interval:f} s")
     if t - last_print_time >= print_interval:
         last_print_time = t
-        print(f"{time.asctime()} -> t={t*T_scale*1e3:.1f} ms | H={h[mid_ind]*R*1e6:.1f} um | Vz={V[2]*VT*1e3:.1f} mm/s")
+        print(f"{time.asctime()} -> t={t*T_scale*1e3:.1f} ms | H={h[mid_ind]*R*1e6:.1f} um | Vz={V[1]*VT*1e3:.1f} mm/s")
         save_state(t, y)
         log_force(t, y)
         # test_message(y)
@@ -323,7 +327,7 @@ def event_print(t, y):
 def test_message(y):
     h, V = y[:-3], y[-3:]
     p = YL_equation(h)
-    print(f"h_mean={np.mean(h):.2f} | V={np.linalg.norm(V, 2):.2f} | p_mean={np.mean(p)*P0:.2f}")
+    print(f"h_mean={np.mean(h):.2f} | V={np.linalg.norm(V):.2f} | p_mean={np.mean(p)*P0:.2f}")
 
 def main(args):
     # define constants as globals, to avoid passing too many arguments
@@ -334,6 +338,8 @@ def main(args):
     global save_folder
     global last_print_time, print_interval
     last_print_time = 0.0
+    global edge_height
+    global im
     ########################################################################################
     
     # I/O
@@ -347,12 +353,12 @@ def main(args):
         save_initial_params(args)
         global dx
         x = np.linspace(-rm*R, rm*R, num=N)
-        y = np.linspace(-rm*R, rm*R, num=N)
-        X, Y = np.meshgrid(x, y)
+        z = np.linspace(-rm*R, rm*R, num=N)
+        X, Z = np.meshgrid(x, z)
         dx = x[1] - x[0]
         t_current = 0 
-        h = H0 + (X**2 + Y**2) / R / 2
-        Vv = np.array([-V0*np.sin(theta/180*np.pi), 0, V0*np.cos(theta/180*np.pi)])         
+        h = H0 + (X**2 + Z**2) / R / 2
+        Vv = np.array([-V0*np.sin(theta/180*np.pi), V0*np.cos(theta/180*np.pi), 0])         
     else:
         # load initial params
         load_initial_params(load_folder)
@@ -364,6 +370,8 @@ def main(args):
         T = args.time + t_current
     precomputes()
     
+    edge_height = h.flatten()[edge_ind].mean() - h.flatten()[mid_ind]
+    im = Sphere(R)
     # compute simulation time steps and save time steps (dimensionless)
     T /= T_scale
     t_current /= T_scale
