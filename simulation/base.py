@@ -1,13 +1,30 @@
 import yaml
 from pathlib import Path
-from dataclasses import asdict
-from params import SimulationParams, update_params, from_dict
-from units import Units
+from dataclasses import dataclass, asdict
+from .units import Units
 
 class Simulator:
     """This class implements a framework for simple numerical simulations. It includes routine operations such as read and save parameters, setup directories, setup units, and logging. A specific simulation logic can be implemented by a subclass, which overrides the `pre_run`, `_run` and `post_run` methods."""
-    def __init__(self, save_folder, exist_ok=False):
+    def __init__(self, 
+                 save_folder : str, 
+                 params: dataclass,
+                 units,
+                 exist_ok : bool = False):
+        """Initialize the simulator with a save folder and a flag to indicate whether to overwrite existing directories.
 
+        Parameters
+        ----------
+        save_folder : str or Path
+            The folder where the simulation results and parameters will be saved. It can be a relative or absolute path.
+        params : SimulationParams
+            A dataclass object containing the simulation parameters.
+        units : Units
+            A Units object for converting quantities between dimensionful and dimensionless.
+        exist_ok : bool, optional
+            If True, the existing directories will not raise an error. If False, an error will be raised if the directories already exist. Default is False.
+        """
+        self.params = params
+        self.units = units
         self.save_folder = Path(save_folder).expanduser().resolve()
         self.setup_dirs(exist_ok)
         
@@ -39,26 +56,20 @@ class Simulator:
         self.params = params
     
     def load_params(self):
-        """Read args from file `params.yml`."""
+        """Read args from file `params.yaml`."""
         try:
             with open(self.params_file, "r") as f:
                 params_dict = yaml.safe_load(f)
-                self.params = from_dict(SimulationParams, params_dict)
+                self.params = type(self.params)(**params_dict)
         except FileNotFoundError as e:
             raise FileNotFoundError(f"File not found: {e}")
 
     def save_params(self):
         try:
-            with open(self.save_folder / "params.yml", "w") as f:
-                if isinstance(self.params, dict):
-                    yaml.dump(self.params, f)
-                else:
-                    yaml.dump(asdict(self.params), f)
+            with open(self.params_file, "w") as f:
+                yaml.dump(asdict(self.params), f)
         except AttributeError as e:
             raise AttributeError(f"Attribute error: {e}")
-
-    def update_params(self, **updates):
-        self.params = update_params(self.params, **updates)
     
     def set_units(self, units: Units):
         """Units class to convert the quantities between dimensionful and dimensinoless."""
@@ -68,7 +79,6 @@ class Simulator:
         raise NotImplementedError("_run() has not been implemented.")
 
     def run(self):
-
         self.pre_run()
         self._run()
         self.post_run()
