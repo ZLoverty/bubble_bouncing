@@ -1,4 +1,4 @@
-from bubble import SimulationParams
+from bubble_bouncing.bubble import SimulationParams
 from dataclasses import fields
 
 def _decomp(y):

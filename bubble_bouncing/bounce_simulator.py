@@ -7,10 +7,10 @@ The main logic of the bubble bouncing simulation. It initializes the simulator, 
 """
 import numpy as np
 from scipy import integrate
-from simulation import Simulator, Units, DataBuffer
-from bubble import SimulationParams, compute_tff, compute_drag, compute_amf, compute_buoyancy, compute_lift, Bubble
-from utils import _decomp, gradient_operators
 import h5py
+from bubble_bouncing.simulation import Simulator, Units, DataBuffer
+from bubble_bouncing.bubble import SimulationParams, compute_tff, compute_drag, compute_amf, compute_buoyancy, compute_lift, Bubble
+from bubble_bouncing.utils import _decomp, gradient_operators
 
 class BounceSimulator(Simulator):
 
