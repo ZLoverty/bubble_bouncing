@@ -4,11 +4,10 @@ from dataclasses import dataclass, asdict
 from .units import Units
 
 class Simulator:
-    """This class implements a framework for simple numerical simulations. It includes routine operations such as read and save parameters, setup directories, setup units, and logging. A specific simulation logic can be implemented by a subclass, which overrides the `pre_run`, `_run` and `post_run` methods."""
+    """This class implements a framework for simple numerical simulations. It includes routine operations such as read and save parameters, setup directories, and logging. A specific simulation logic can be implemented by a subclass, which overrides the `pre_run`, `_run` and `post_run` methods."""
     def __init__(self, 
                  save_folder : str, 
                  params: dataclass,
-                 units,
                  exist_ok : bool = False):
         """Initialize the simulator with a save folder and a flag to indicate whether to overwrite existing directories.
 
@@ -18,13 +17,10 @@ class Simulator:
             The folder where the simulation results and parameters will be saved. It can be a relative or absolute path.
         params : SimulationParams
             A dataclass object containing the simulation parameters.
-        units : Units
-            A Units object for converting quantities between dimensionful and dimensionless.
         exist_ok : bool, optional
             If True, the existing directories will not raise an error. If False, an error will be raised if the directories already exist. Default is False.
         """
         self.params = params
-        self.units = units
         self.save_folder = Path(save_folder).expanduser().resolve()
         self.setup_dirs(exist_ok)
         
@@ -41,7 +37,7 @@ class Simulator:
         self.params_file = self.save_folder / "params.yaml"
         self.log_file = self.save_folder / "sim.log"
         self.data_dir = self.save_folder / "results"
-        self.save_folder.mkdir(exist_ok=exist_ok)
+        self.save_folder.mkdir(parents=True, exist_ok=exist_ok)
         self.data_dir.mkdir(exist_ok=exist_ok)
         
     def pre_run(self):
@@ -71,10 +67,6 @@ class Simulator:
         except AttributeError as e:
             raise AttributeError(f"Attribute error: {e}")
     
-    def set_units(self, units: Units):
-        """Units class to convert the quantities between dimensionful and dimensinoless."""
-        self.units = units
-
     def _run(self):
         raise NotImplementedError("_run() has not been implemented.")
 

@@ -1,3 +1,6 @@
+from bubble import SimulationParams
+from dataclasses import fields
+
 def _decomp(y):
     """Decompose the state variable y into h, V and x."""
     return y[:-6], y[-6:-3], y[-3:]
@@ -50,3 +53,44 @@ def gradient_operators(N, dx):
     G2z = kron(D2x, eye)
 
     return {"x": Gx, "z": Gz, "2x": G2x, "2z": G2z}
+
+def available_keys():
+    """Return a list of keys that can be set from command line."""
+    paramsd = SimulationParams()
+    keys = [f.name for f in fields(paramsd)]
+    return keys
+
+def parse_params(unparsed_params):
+    """Parse parameters as key-value pairs from command line. Command line command look like
+    
+    python simulate.py folder --arg1 ARG1 --arg2 ARG2 ...
+    
+    This function parse the arguments into a dictionary, with argument name as the parameter name, and convert values to correct types according to the SimulationParams dataclass.
+
+    Parameters
+    ----------
+    unparsed_params : list
+        list of unknown arguments to be parsed, typically returned by `parser.parse_known_args()`
+
+    Returns
+    -------
+    args_dict : dict
+        a dict of parsed parameters
+    """
+
+    paramsd = SimulationParams()
+    keys = [f.name for f in fields(paramsd)]
+
+    # Parse dynamic key-value pairs from unknown args
+    it = iter(unparsed_params)
+    arg_dict = {}
+    for arg in it:
+        if arg.startswith('--'):
+            key = arg[2:]
+            if key in keys:
+                try:
+                    value = type(getattr(paramsd, key))(next(it))
+                except StopIteration:
+                    raise ValueError(f"Missing value for argument: --{key}")
+                arg_dict[key] = value
+    return arg_dict

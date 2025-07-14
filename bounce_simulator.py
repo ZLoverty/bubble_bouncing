@@ -17,6 +17,7 @@ class BounceSimulator(Simulator):
 
     def pre_run(self):
         self.save_params()
+        self.units = self._setup_units()
         self._setup_mesh()
         self.Grad = gradient_operators(self.params.N, self.dx)
         self._setup_index_masks()
@@ -37,7 +38,22 @@ class BounceSimulator(Simulator):
         self.V_buffer = DataBuffer(h5file, "V", (3, ))
         self.x_buffer = DataBuffer(h5file, "x", (3, ))
         self.first_bounce = False
-
+    def _setup_units(self):
+        """Setup scales to nondimensionalize the equations."""
+        params = self.params
+        R = params.R
+        mu = params.mu
+        sigma = params.sigma
+        V = sigma / mu
+        scales = {
+            "length": (R, "m"),
+            "velocity": (V, "m/s"),
+            "time": (R/V, "s"),
+            "pressure": (sigma/R, "N/m^2"),
+            "acceleration": (V**2/R, "m/s^2")
+        }
+        return Units(scales)
+    
     def _setup_mesh(self):
         """Setup a NxN square mesh."""
         rm = self.params.rm
@@ -286,5 +302,5 @@ if __name__ == "__main__":
     }
     units = Units(scales)
 
-    sim = BounceSimulator("~/Documents/test", params, units, exist_ok=True)
+    sim = BounceSimulator("~/Documents/test", params, exist_ok=True)
     sim.run()
