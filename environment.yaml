@@ -1,0 +1,11 @@
+name: bcsim
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - h5py
+  - python=3.12
+  - numpy
+  - pyyaml
+  - scipy
+  - healpy
