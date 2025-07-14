@@ -26,16 +26,23 @@ class BounceSimulator(Simulator):
         self.save_interval = self.units.to_nondim(self.params.save_time, "time")
         self.last_print = 0.0
         self.last_save = 0.0
-        # save t, h, V, x
-        h5file = self.data_dir / "data.h5"
-        with h5py.File(h5file, "w") as f:
-            pass
-        self.t_buffer = DataBuffer(h5file, "t")
-        N = self.params.N
-        self.h_buffer = DataBuffer(h5file, "h", (N**2, ))
-        self.V_buffer = DataBuffer(h5file, "V", (3, ))
-        self.x_buffer = DataBuffer(h5file, "x", (3, ))
         self.first_bounce = False
+        self.data_to_store = [
+            ("t", ()),
+            ("h", (self.params.N**2, )),
+            ("V", (3, )),
+            ("x", (3, )), 
+            ("buoyancy", (3, )),
+            ("drag", (3, )),
+            ("amf2", (3, )),
+            ("tff", (3, )),
+            ("lift", (3, )),
+            ("x_im", (3, )),
+            ("V_im", (3, ))
+        ]
+        self._setup_databuffers()
+        self.im = None
+        
     def _setup_units(self):
         """Setup scales to nondimensionalize the equations."""
         params = self.params
@@ -91,6 +98,15 @@ class BounceSimulator(Simulator):
         V0v = np.array([-V0*np.sin(theta_rad), V0*np.cos(theta_rad), 0])
         return np.concatenate([h0, V0v, x0])
 
+    def _setup_databuffers(self):
+        # save t, h, V, x
+        h5file = self.data_dir / "data.h5"
+        with h5py.File(h5file, "w") as f:
+            pass
+        self.data_buffer = {}
+        for name, shape in self.data_to_store:
+            self.data_buffer[name] = DataBuffer(h5file, name, shape)
+    
     def compute_forces(self, t, y):
         """Compute the forces acting on a bubble."""
 
@@ -212,28 +228,33 @@ class BounceSimulator(Simulator):
                 x_dim = self.units.to_dim(x, "length")
                 # print info
                 print(f"t={t_dim*1e3:.2f} ms | hmin={h_dim.min()*1e3:.2f} mm | V_y={V_dim[1]*1e3:.1f} mm/s | {x_dim*1e3}")
-         
+
                 # buffer data
-                self.t_buffer.append(t_dim)
-                self.h_buffer.append(h_dim)
-                self.V_buffer.append(V_dim)
-                self.x_buffer.append(x_dim)
-            
+                self.data_buffer["t"].append(t_dim)
+                self.data_buffer["h"].append(h_dim)
+                self.data_buffer["V"].append(V_dim)
+                self.data_buffer["x"].append(x_dim)
+
+                forces = self.compute_forces(t, y)
+                del forces["Cm"]
+                for name, force in forces.items():
+                    self.data_buffer[name].append(force)
+                if self.im is None:
+                    self.data_buffer["x_im"].append(np.zeros(3) * np.nan)
+                    self.data_buffer["V_im"].append(np.zeros(3) * np.nan)
+                else:
+                    self.data_buffer["x_im"].append(self.im.pos)
+                    self.data_buffer["V_im"].append(self.im.U)
             # Flush data to file
             if t == 0 or t - self.last_save >= self.save_interval:
                 self.last_save = t
-                self.t_buffer.flush()
-                self.h_buffer.flush()
-                self.V_buffer.flush()
-                self.x_buffer.flush()
-
+                for name, _ in self.data_to_store:
+                    self.data_buffer[name].flush()
             return 1
 
-        
         T = self.units.to_nondim(self.params.T, "time")
 
         sol = integrate.solve_ivp(film_drainage, [0, T], self.initial_state, method="BDF", events=event_print, atol=1e-6, rtol=1e-3)
-
 
     def run(self):
         self.pre_run()
@@ -243,18 +264,5 @@ class BounceSimulator(Simulator):
 if __name__ == "__main__":
 
     params = SimulationParams(R=6e-4, N=50)
-    R = params.R
-    mu = params.mu
-    sigma = params.sigma
-    V = sigma / mu
-    scales = {
-        "length": (R, "m"),
-        "velocity": (V, "m/s"),
-        "time": (R/V, "s"),
-        "pressure": (sigma/R, "N/m^2"),
-        "acceleration": (V**2/R, "m/s^2")
-    }
-    units = Units(scales)
-
     sim = BounceSimulator("~/Documents/test", params, exist_ok=True)
     sim.run()
