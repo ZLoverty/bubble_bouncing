@@ -7,7 +7,6 @@ The main logic of the bubble bouncing simulation. It initializes the simulator, 
 """
 import numpy as np
 from scipy import integrate
-import matplotlib.pyplot as plt
 from simulation import Simulator, Units, DataBuffer
 from bubble import SimulationParams, compute_tff, compute_drag, compute_amf, compute_buoyancy, compute_lift, Bubble
 from utils import _decomp, gradient_operators
@@ -22,7 +21,6 @@ class BounceSimulator(Simulator):
         self.Grad = gradient_operators(self.params.N, self.dx)
         self._setup_index_masks()
         self.initial_state = self._initial_condition()
-        self._setup_canvas(self.initial_state)
         
         self.print_interval = self.units.to_nondim(self.params.print_time, "time")
         self.save_interval = self.units.to_nondim(self.params.save_time, "time")
@@ -93,30 +91,6 @@ class BounceSimulator(Simulator):
         V0v = np.array([-V0*np.sin(theta_rad), V0*np.cos(theta_rad), 0])
         return np.concatenate([h0, V0v, x0])
 
-    def _setup_canvas(self, y0):
-        if plt.gca() is not None:
-            self.fig = plt.gcf()
-            self.ax = plt.gca()
-            self.ax.cla()
-        else:
-            self.fig, self.ax = plt.subplots()
-        self.ax.set_title("Bubble simulation")
-        self.ax.set_xlabel("$t$")
-        self.ax.set_ylabel("$y$")
-        rm_dim = self.units.to_dim(self.params.rm, "length")
-        H0_dim = self.params.H0
-        self.ax.set_xlim(-rm_dim, rm_dim)
-        self.ax.set_ylim(0, H0_dim)
-
-        h, V, x = _decomp(y0)
-
-        self.line, = self.ax.plot([], [], "o")
-        self.annotation_text = self.ax.annotate(f"0", (0.9, 0.9), xycoords="axes fraction")
-        plt.ion()
-        plt.show()
-        plt.pause(.1)
-
-
     def compute_forces(self, t, y):
         """Compute the forces acting on a bubble."""
 
@@ -175,24 +149,6 @@ class BounceSimulator(Simulator):
             "lift": lift
         }
 
-    def update_canvas(self):
-        self.line.set_xdata(self.xdata)
-        self.line.set_ydata(self.ydata)
-        self.fig.canvas.draw()
-        self.fig.canvas.flush_events()
-
-    def update_vis_data(self, t, y):
-        rm = self.params.rm
-        N = self.params.N
-        h, V, x = _decomp(y)
-        t_dim = self.units.to_dim(t, "time")
-        rm_dim = self.units.to_dim(rm, "length")
-        h_dim = self.units.to_dim(h, "length")
-
-        self.annotation_text.set_text(f"{t_dim*1e3:.1f} ms")
-        self.xdata = np.linspace(-rm_dim, rm_dim, N)
-        self.ydata = h_dim[self.centerslice_ind]
-
     def post_run(self):
         print("Simulation finished.")
 
@@ -244,9 +200,9 @@ class BounceSimulator(Simulator):
             return np.concatenate([dhdt, dVdt, V])
         
         def event_print(t, y):
-            """This is a workaround of the action we take periodically during the simulation. We need this because the time stepping in this code is implicit, meaning that we do not have a "loop", but rather one line of code. This function is passed as an argument to the `scipy.integrate.solve_ivp()` function. It checks the time and state, and can perform info print, visual update and data flushing."""
+            """This is a workaround of the action we take periodically during the simulation. We need this because the time stepping in this code is implicit, meaning that we do not have a "loop", but rather one line of code. This function is passed as an argument to the `scipy.integrate.solve_ivp()` function. It checks the time and state, and can perform info print, and data flushing."""
 
-            # Print info and update visuals
+            # Print info
             if t == 0 or t - self.last_print >= self.print_interval:
                 self.last_print = t
                 h, V, x = _decomp(y)
@@ -256,9 +212,7 @@ class BounceSimulator(Simulator):
                 x_dim = self.units.to_dim(x, "length")
                 # print info
                 print(f"t={t_dim*1e3:.2f} ms | hmin={h_dim.min()*1e3:.2f} mm | V_y={V_dim[1]*1e3:.1f} mm/s | {x_dim*1e3}")
-                # update visuals
-                self.update_vis_data(t, y)
-                self.update_canvas()
+         
                 # buffer data
                 self.t_buffer.append(t_dim)
                 self.h_buffer.append(h_dim)
