@@ -14,7 +14,7 @@ from bubble import SimulationParams
 import argparse
 
 parser = argparse.ArgumentParser(f"This script takes in the save_folder as a positional argument. Optional arguments can be passed to set simulation parameters. Available arguments are {available_keys()}. Set using --arg ARG pairs.")
-parser.add_argument("save_folder", type=str, help="folder to save simulation data.")
+parser.add_argument("--save_folder", type=str, default="~/Documents/test", help="folder to save simulation data.")
 parser.add_argument("-f", action="store_true")
 # Parse known args; leave unknown ones (like --R, --T, etc.)
 args, unknown = parser.parse_known_args()
