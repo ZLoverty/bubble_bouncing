@@ -11,10 +11,13 @@ import h5py
 from bubble_bouncing.simulation import Simulator, Units, DataBuffer
 from bubble_bouncing.bubble import SimulationParams, compute_tff, compute_drag, compute_amf, compute_buoyancy, compute_lift, Bubble
 from bubble_bouncing.utils import _decomp, gradient_operators
+import logging
 
 class BounceSimulator(Simulator):
 
     def pre_run(self):
+        logging.info("============NEW SIMULATION==========")
+        logging.info(f"R = {self.params.R*1e3:.2f} mm | angle = {self.params.theta:.1f} deg | Cl = {self.params.lift_coef:.1f}")
         self.save_params()
         self.units = self._setup_units()
         self._setup_mesh()
@@ -45,6 +48,7 @@ class BounceSimulator(Simulator):
         
     def _setup_units(self):
         """Setup scales to nondimensionalize the equations."""
+        logging.info("Setting units")
         params = self.params
         R = params.R
         mu = params.mu
@@ -61,6 +65,7 @@ class BounceSimulator(Simulator):
     
     def _setup_mesh(self):
         """Setup a NxN square mesh."""
+        logging.info("Setting mesh")
         rm = self.params.rm
         N = self.params.N
         x = np.linspace(-rm, rm, num=N)
@@ -88,6 +93,7 @@ class BounceSimulator(Simulator):
 
     def _initial_condition(self):
         """Initialize the simulation with the bubble located H0 away from the surface in y-direction. """
+        logging.info("Setting initial conditions")
         H0_dim = self.params.H0
         H0 = self.units.to_nondim(H0_dim, "length")
         h0 = H0 + (self.mesh[:, 0]**2 + self.mesh[:, 2]**2) / 2
@@ -138,6 +144,7 @@ class BounceSimulator(Simulator):
             self.first_bounce = True
             self.U_im = units.to_dim(V, "velocity")
             self.t_im = units.to_dim(t, "time")
+            logging.info(f"First bounce at {self.t_im*1e3:.1f} ms")
             self.x_im_start = units.to_dim(x, "length")
             self.im = Bubble(R, U=self.U_im)
             self.re = Bubble(R)
@@ -166,7 +173,7 @@ class BounceSimulator(Simulator):
         }
 
     def post_run(self):
-        print("Simulation finished.")
+        logging.info("Simulation finished.")
 
     def YL_equation(self, h):
         """Implement the dimensionless Young-Laplace equation
@@ -227,7 +234,7 @@ class BounceSimulator(Simulator):
                 V_dim = self.units.to_dim(V, "velocity")
                 x_dim = self.units.to_dim(x, "length")
                 # print info
-                print(f"t={t_dim*1e3:.2f} ms | hmin={h_dim.min()*1e3:.2f} mm | V_y={V_dim[1]*1e3:.1f} mm/s | {x_dim*1e3}")
+                logging.debug(f"t={t_dim*1e3:.2f} ms | hmin={h_dim.min()*1e3:.2f} mm | V_y={V_dim[1]*1e3:.1f} mm/s | {x_dim*1e3}")
 
                 # buffer data
                 self.data_buffer["t"].append(t_dim)
@@ -247,11 +254,14 @@ class BounceSimulator(Simulator):
                     self.data_buffer["V_im"].append(self.im.U)
             # Flush data to file
             if t == 0 or t - self.last_save >= self.save_interval:
+                t_dim = self.units.to_dim(t, "time")
+                logging.info(f"Dumping data to file at t = {t_dim*1e3:.2f} ms")
                 self.last_save = t
                 for name, _ in self.data_to_store:
                     self.data_buffer[name].flush()
             return 1
 
+        logging.info("Simulation starts!")
         T = self.units.to_nondim(self.params.T, "time")
 
         sol = integrate.solve_ivp(film_drainage, [0, T], self.initial_state, method="BDF", events=event_print, atol=1e-6, rtol=1e-3)
@@ -265,4 +275,10 @@ if __name__ == "__main__":
 
     params = SimulationParams(R=6e-4, N=50)
     sim = BounceSimulator("~/Documents/test", params, exist_ok=True)
+    # Basic configuration
+    logging.basicConfig(
+        filename = str(sim.log_file),
+        level = logging.DEBUG,        # Set the logging level
+        format = '%(asctime)s - %(levelname)s - %(message)s',  # Log format
+    )
     sim.run()
