@@ -128,7 +128,7 @@ class Bubble:
         return surface_coords, unit_normals, differential_surface_area
     
     def _compute_surface_tangent_xy(self):
-        """Compute sphere surface tangential unit vectors, specifically their projections on the xz plane."""
+        """Compute sphere surface tangential unit vectors, specifically their projections on the xy plane."""
         tangent = np.zeros_like(self.unit_normals)
         tangent[:, 0] = self.unit_normals[:, 1]
         tangent[:, 1] = - self.unit_normals[:, 0]
@@ -305,3 +305,4 @@ class Vector(np.ndarray):
         """
         R = rotation_matrix_axis(k, angle)
         return Vector((R @ self.T).T)
+    

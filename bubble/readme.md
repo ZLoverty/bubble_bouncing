@@ -1,0 +1,5 @@
+# bubble
+
+This folder has the definitions of functions and classes necessary for the simulation specific for the bubble bouncing. For example, we implement the Bubble class, which defines a moving bubble of certain size and velocity, and provide a method to conveniently compute the Oseen wake flow field associated with this bubble. Moreover, we define the `SimulationParams` class here, which defines the set of simulation parameters and the type of each quantities, as well as the default values of the parameters. We also define complicated equations - such as the computation of forces - here, to make the main logic more readable. 
+
+We plan to also implement a `BubbleStates` class, which has attribute t, y and forces. It can decompose the state y into physical entities, such as h, V, x. It can also save data to an .h5 file. It can also generate string representations for print. 

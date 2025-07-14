@@ -10,6 +10,7 @@ class SimulationParams:
     rho: float = 1e3
     R: float = 6e-4
     theta: float = 22.5
+    lift_coef: float = 1.0
 
     # Initial conditions:
     V0: float = -0.3
@@ -19,4 +20,5 @@ class SimulationParams:
     T: float = 0.2
     rm: float = 1.2
     N: int = 100
-    save_time: float = 1e-4
+    save_time: float = 1e-3
+    print_time: float = 1e-5

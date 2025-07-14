@@ -135,3 +135,41 @@ def compute_tff(p, dhdx, dx):
     tff = np.array([tffx, tffy, 0])
     return tff
 
+def compute_lift(a, surface_flow, ds, U, lift_coef=1.0):
+    """Compute the circulation induced by the Oseen wake flow. We use the following formula
+    
+    Gamma = 1/2a \int_S u_s dS
+    lift = 4 * np.pi * a**3 / 3 * lift_coef / np.pi / a**2 * (Gamma x U)
+
+    Parameters
+    ----------
+    a : float
+        bubble radius
+    surface_flow : ndarray[float]
+        flow field projection on the intersection between bubble surface and xy plane
+    ds : float
+        differential area on the bubble surface
+    U : float
+        bubble velocity
+    lift_coef : float
+        lift coefficient
+    
+    Return
+    ------
+    lift : float
+        lift force
+
+    Note
+    ----
+    The definition of surface tangents in the Bubble class dictates that positive Gamma represents CW rotation, where the direction of vorticity points in +z. Therefore, the vector form Gamma should be the magnitude times e_z. 
+
+    Example
+    -------
+    >>> flow = im.Oseen_wake(re.surf_coords+re.pos)
+    >>> surface_flow = flow * re.unit_tangents
+    >>> lift = compute_lift(a, surface_flow, re.ds, re.U)
+    """
+    
+    Gamma = 1 / 2 / a * surface_flow.sum() * ds * np.array([0, 0, 1])
+    lift = 4 * np.pi * a**3 / 3 * lift_coef / np.pi / a**2 * np.cross(Gamma, U)
+    return lift

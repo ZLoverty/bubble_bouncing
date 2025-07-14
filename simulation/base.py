@@ -38,7 +38,7 @@ class Simulator:
     
     def setup_dirs(self, exist_ok):
         
-        self.params_file = self.save_folder / "params.yml"
+        self.params_file = self.save_folder / "params.yaml"
         self.log_file = self.save_folder / "sim.log"
         self.data_dir = self.save_folder / "results"
         self.save_folder.mkdir(exist_ok=exist_ok)

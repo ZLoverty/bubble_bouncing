@@ -180,3 +180,6 @@ run.py
 
 # mesh file 
 *.msh
+
+# run script
+run.py
