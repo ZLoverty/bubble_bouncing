@@ -14,7 +14,7 @@ class SimulationParams:
 
     # Initial conditions:
     V0: float = -0.3
-    H0: float = 1e-3
+    H0: float = 5e-3
 
     # Simulation control:
     T: float = 0.2

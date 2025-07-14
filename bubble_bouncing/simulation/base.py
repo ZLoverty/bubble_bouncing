@@ -2,6 +2,7 @@ import yaml
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from .units import Units
+import logging
 
 class Simulator:
     """This class implements a framework for simple numerical simulations. It includes routine operations such as read and save parameters, setup directories, and logging. A specific simulation logic can be implemented by a subclass, which overrides the `pre_run`, `_run` and `post_run` methods."""
@@ -35,7 +36,8 @@ class Simulator:
     def setup_dirs(self, exist_ok):
         
         self.params_file = self.save_folder / "params.yaml"
-        self.log_file = self.save_folder / "sim.log"
+        self.log_file = self.save_folder / "bcsim.log"
+        self.log_file.touch()
         self.data_dir = self.save_folder / "results"
         self.save_folder.mkdir(parents=True, exist_ok=exist_ok)
         self.data_dir.mkdir(exist_ok=exist_ok)

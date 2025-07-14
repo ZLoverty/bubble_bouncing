@@ -16,10 +16,16 @@ import argparse
 from bubble_bouncing.utils import parse_params, available_keys
 from bubble_bouncing.bounce_simulator import BounceSimulator
 from bubble_bouncing.bubble import SimulationParams
+import logging
 
 def run(save_folder, args_dict, exist_ok):
     params = SimulationParams(**args_dict)
     sim = BounceSimulator(save_folder, params, exist_ok=exist_ok)
+    logging.basicConfig(
+        filename = sim.log_file,
+        level = logging.INFO,        # Set the logging level
+        format = '%(asctime)s - %(levelname)s - %(message)s',  # Log format
+    )
     sim.run()
 
 def main():
@@ -35,13 +41,3 @@ def main():
 
 if __name__=="__main__":
     main()
-
-
-
-
-
-
-
-
-
-
