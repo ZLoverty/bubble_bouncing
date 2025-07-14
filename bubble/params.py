@@ -19,6 +19,6 @@ class SimulationParams:
     # Simulation control:
     T: float = 0.2
     rm: float = 1.2
-    N: int = 100
+    N: int = 50
     save_time: float = 1e-3
     print_time: float = 1e-5
