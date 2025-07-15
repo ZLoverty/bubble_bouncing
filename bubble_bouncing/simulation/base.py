@@ -37,10 +37,10 @@ class Simulator:
         
         self.params_file = self.save_folder / "params.yaml"
         self.log_file = self.save_folder / "bcsim.log"
-        self.log_file.touch()
         self.data_dir = self.save_folder / "results"
         self.save_folder.mkdir(parents=True, exist_ok=exist_ok)
         self.data_dir.mkdir(exist_ok=exist_ok)
+        self.log_file.touch()
         
     def pre_run(self):
         raise NotImplementedError("pre_run() has not been implemented.")
