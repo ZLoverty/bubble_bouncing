@@ -104,8 +104,8 @@ def compute_amf(H, R, rho, V):
 def compute_tff(p, dhdx, dx):
     """Compute thin film forces by integrating the pressure across the bubble surface. Since the bubble profile is asymmetric in the x-direction, we also need to consider the x-component of the thin film force. The formula used is:
     
-    F_x = \int p * dhdx ds
-    F_y = \int p ds
+    F_x = int p * dhdx ds
+    F_y = int p ds
 
     where ds is the differential area element along the bubble surface. In our computation, we approximate ds as dx^2.
 
@@ -138,7 +138,7 @@ def compute_tff(p, dhdx, dx):
 def compute_lift(a, surface_flow, ds, U, lift_coef=1.0):
     """Compute the circulation induced by the Oseen wake flow. We use the following formula
     
-    Gamma = 1/2a \int_S u_s dS
+    Gamma = 1/2a int_S u_s dS
     lift = 4 * np.pi * a**3 / 3 * lift_coef / np.pi / a**2 * (Gamma x U)
 
     Parameters
