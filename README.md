@@ -9,6 +9,27 @@ On top of existing works, the current simulation code features:
 3. Data saveing with high performance .h5 files;
 4. Visualization tools. 
 
+## Note for future development
+
+Import within the package is adapted to the "editable install" style. That said, internal imports are only valid once this package is installed with
+
+```
+pip install -e .
+```
+
+A fresh and minimal environment is recommended, and can be set up using `conda`
+
+```
+conda env create -f environment.yaml
+conda activate bcsim
+```
+
+If new dependencies are added in the future, update `environment.yaml` using
+
+```
+conda env export --from-history > environment.yaml
+```
+
 ## Enhancement proposals (BCEP)
 
 ### BCEP001: improve visualization methods
