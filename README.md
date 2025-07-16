@@ -38,3 +38,13 @@ conda env export --from-history > environment.yaml
 2. Bubble deformation visualization method;
 3. Animation generator: all vis scripts should be able to generate preview (one image with selected frames drawn), video (480p .mp4, use flag -v as "video") and HD video (1080p .mp4, use flag -vh as "high quality video").
 
+### BCEP002: improve camera motion and playback speed
+
+1. Camera should follow the bubble at the point of bouncing;
+2. Playback can slow down to better visualize the bounce;
+3. Transparent surface can help.
+
+### BCEP003: Make visualize.py more modular
+
+The current form is difficult to maintain, due to the various mode options and the combined combined dynamic and static objects. Ideally, this class should be like the manim main class, where adding a reference box should just be a one-liner. THere should be methods such as `add_bubble`, `add_surface`, `camera_closeup(object)`. Then, the completed scene would control the export options, such as `w`, `s`, `v` and `vh`. 
+
