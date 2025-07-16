@@ -99,11 +99,11 @@ class BubbleDataVisualizer(dict):
         else:
             raise ValueError("mode has to be 'v' or 'vh'.")
         
-    def traj_com(self, mode="w"):
+    def traj_com(self, mode="w", playback=0.01):
         """Center of mass trajectory."""
         vis_name = "traj_com"
 
-        data = self._interp(mode=mode)
+        data = self._interp(mode=mode, playback=playback)
 
         traj = pv.PolyData(data["x"])
         height, fps = self._mode_specs(mode)
@@ -205,11 +205,11 @@ class BubbleDataVisualizer(dict):
         plotter.camera.zoom(1.5)
         plotter.show_axes()
 
-    def morphology(self, mode="w"):
+    def morphology(self, mode="w", playback=0.01):
         """Bubble morphology visualization."""
         vis_name = "morphology"
 
-        data = self._interp(mode=mode)
+        data = self._interp(mode=mode, playback=playback)
 
         traj = pv.PolyData(data["x"])
         height, fps = self._mode_specs(mode)
@@ -278,7 +278,7 @@ class BubbleDataVisualizer(dict):
         else: # show on screen 
             raise ValueError("mode has to be 'w', 's', 'v' or 'vh'.")
 
-    def Oseen_circulation(self, mode="w", t_snap=None):
+    def Oseen_circulation(self, mode="w", playback=0.01):
         """Visualize the circulation flow around the bubble induced by the Oseen wake of the imaginary bubble."""
 
         def draw_bubble_surface_flow(plotter, im, re, clip=True, max_mag=0.01):
@@ -318,7 +318,7 @@ class BubbleDataVisualizer(dict):
 
         vis_name = "Oseen_circulation"
 
-        data = self._interp(mode=mode)
+        data = self._interp(mode=mode, playback=playback)
         # import pdb
         # pdb.set_trace()
         height, fps = self._mode_specs(mode)
@@ -327,11 +327,10 @@ class BubbleDataVisualizer(dict):
         inds = np.arange(len(data["t"]))
 
         # determine the time for the snapshot
-        if t_snap is None:
-            first_valid_index = np.argmax(~np.isnan(data["x_im"][:, 0]))
-            t_first_bounce = data["t"][first_valid_index]
-            # look at 5 ms after the first bounce
-            t_snap = t_first_bounce + 0e-3
+        first_valid_index = np.argmax(~np.isnan(data["x_im"][:, 0]))
+        t_first_bounce = data["t"][first_valid_index]
+        # look at 5 ms after the first bounce
+        t_snap = t_first_bounce + 2e-3
             
         ind_snap = np.abs(data["t"]-t_snap).argmin()
 
