@@ -3,9 +3,11 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - h5py
-  - python=3.12
   - numpy
+  - python=3.12
+  - h5py
   - pyyaml
-  - scipy
   - healpy
+  - scipy
+  - pyvista
+  - imageio
