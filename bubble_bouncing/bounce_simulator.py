@@ -140,16 +140,8 @@ class BounceSimulator(Simulator):
         amf2, Cm = compute_amf(H, R, rho, V_dim)
         tff = compute_tff(p_dim, dhdx, dx_dim)
 
-        if x[1] < 1 and self.first_bounce == False:
-            self.first_bounce = True
-            self.U_im = units.to_dim(V, "velocity")
-            self.t_im = units.to_dim(t, "time")
-            logging.info(f"First bounce at {self.t_im*1e3:.1f} ms")
-            self.x_im_start = units.to_dim(x, "length")
-            self.im = Bubble(R, U=self.U_im)
-            self.re = Bubble(R)
-            lift = np.array([0, 0, 0])
-        elif self.first_bounce:
+        
+        if self.first_bounce:
             # execute this only after the first bounce
             t_dim = units.to_dim(t, "time")
             x_im = self.x_im_start + (t_dim - self.t_im) * self.U_im
@@ -161,7 +153,7 @@ class BounceSimulator(Simulator):
             surface_flow = flow * self.re.unit_tangents
             lift = compute_lift(self.im.a, surface_flow, self.re.ds, U_re, lift_coef=self.params.lift_coef)
         else:
-            lift = np.array([0, 0, 0])
+            lift = np.zeros(3) * np.nan
 
         return {
             "buoyancy": buoyancy,
@@ -226,15 +218,18 @@ class BounceSimulator(Simulator):
             """This is a workaround of the action we take periodically during the simulation. We need this because the time stepping in this code is implicit, meaning that we do not have a "loop", but rather one line of code. This function is passed as an argument to the `scipy.integrate.solve_ivp()` function. It checks the time and state, and can perform info print, and data flushing."""
 
             # Print info
+            h, V, x = _decomp(y)
+
             if t == 0 or t - self.last_print >= self.print_interval:
-                self.last_print = t
-                h, V, x = _decomp(y)
+                self.last_print = t  
                 t_dim = self.units.to_dim(t, "time")
                 h_dim = self.units.to_dim(h, "length")
                 V_dim = self.units.to_dim(V, "velocity")
                 x_dim = self.units.to_dim(x, "length")
                 # print info
-                logging.debug(f"t={t_dim*1e3:.2f} ms | hmin={h_dim.min()*1e3:.2f} mm | V_y={V_dim[1]*1e3:.1f} mm/s | {x_dim*1e3}")
+                logging.debug(
+                    f"t={t_dim*1e3:.2f} ms | y={x_dim[1]*1e3:.2f} mm | Vy={V_dim[1]*1e3:.1f} mm/s"
+                )
 
                 # buffer data
                 self.data_buffer["t"].append(t_dim)
@@ -252,6 +247,7 @@ class BounceSimulator(Simulator):
                 else:
                     self.data_buffer["x_im"].append(self.im.pos)
                     self.data_buffer["V_im"].append(self.im.U)
+
             # Flush data to file
             if t == 0 or t - self.last_save >= self.save_interval:
                 t_dim = self.units.to_dim(t, "time")
@@ -259,6 +255,22 @@ class BounceSimulator(Simulator):
                 self.last_save = t
                 for name, _ in self.data_to_store:
                     self.data_buffer[name].flush()
+
+            # detect first bounce
+            if x[1] < 1 and self.first_bounce == False:
+                units = self.units
+                R = self.params.R
+                self.first_bounce = True
+                self.U_im = units.to_dim(V, "velocity")
+                self.t_im = units.to_dim(t, "time")
+                logging.info(f"First bounce at {self.t_im*1e3:.1f} ms")
+                self.x_im_start = units.to_dim(x, "length")
+                logging.debug(f"First bounce location y={x[1]}")
+                self.im = Bubble(R, U=self.U_im)
+                self.im.set_pos(self.x_im_start)
+                self.re = Bubble(R)
+                lift = np.array([0, 0, 0])
+
             return 1
 
         logging.info("Simulation starts!")
@@ -274,11 +286,6 @@ class BounceSimulator(Simulator):
 if __name__ == "__main__":
 
     params = SimulationParams(R=6e-4, N=50)
-    sim = BounceSimulator("~/Documents/test", params, exist_ok=True)
-    # Basic configuration
-    logging.basicConfig(
-        filename = str(sim.log_file),
-        level = logging.DEBUG,        # Set the logging level
-        format = '%(asctime)s - %(levelname)s - %(message)s',  # Log format
-    )
+    sim = BounceSimulator("~/Documents/.test", params, exist_ok=True)
+    
     sim.run()
