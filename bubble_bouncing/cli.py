@@ -18,8 +18,9 @@ from bubble_bouncing import BounceSimulator
 from bubble_bouncing import SimulationParams
 from bubble_bouncing import BubbleDataVisualizer
 import logging
+from config import Config
 
-test_folder = "~/Documents/.bcsim_test"
+test_folder = Config().test_folder
 
 def main():
     parser = argparse.ArgumentParser(f"This script takes in the save_folder as a positional argument. Optional arguments can be passed to set simulation parameters. Available arguments are {available_keys()}. Set using --arg ARG pairs.")
@@ -48,31 +49,8 @@ def main():
         format = '%(asctime)s - %(levelname)s - %(message)s',  # Log format
     )
     sim.run()
-    
 
-def view_traj():
-    parser = argparse.ArgumentParser(f"Bubble visualizer.")
-    parser.add_argument("--folder", type=str, default=test_folder, help="Main data folder.")
-    parser.add_argument("--mode", type=str, default="none", help="Visualization mode: s, v or vh.")
-    args = parser.parse_args()
-    vis = BubbleDataVisualizer(args.folder)
-    vis.traj_com(mode=args.mode)
 
-def view_morphology():
-    parser = argparse.ArgumentParser(f"Bubble visualizer.")
-    parser.add_argument("--folder", type=str, default=test_folder, help="Main data folder.")
-    parser.add_argument("--mode", type=str, default="none", help="Visualization mode: s, v or vh.")
-    args = parser.parse_args()
-    vis = BubbleDataVisualizer(args.folder)
-    vis.morphology(mode=args.mode)
-
-def view_oseen():
-    parser = argparse.ArgumentParser(f"Bubble visualizer.")
-    parser.add_argument("--folder", type=str, default=test_folder, help="Main data folder.")
-    parser.add_argument("--mode", type=str, default="none", help="Visualization mode: s, v or vh.")
-    args = parser.parse_args()
-    vis = BubbleDataVisualizer(args.folder)
-    vis.Oseen_circulation(mode=args.mode)
 
 if __name__=="__main__":
     main()

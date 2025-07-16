@@ -16,9 +16,9 @@ Homepage = "https://github.com/zloverty/bubble_bouncing"
 
 [project.scripts]
 bcsim = "bubble_bouncing.cli:main"
-view_traj = "bubble_bouncing.cli:view_traj"
-view_morphology = "bubble_bouncing.cli:view_morphology"
-view_oseen = "bubble_bouncing.cli:view_oseen"
+view_traj = "bubble_bouncing.cli_vis:view_traj"
+view_morphology = "bubble_bouncing.cli_vis:view_morphology"
+view_oseen = "bubble_bouncing.cli_vis:view_oseen"
 
 [tool.setuptools]
 packages = ["bubble_bouncing"]
