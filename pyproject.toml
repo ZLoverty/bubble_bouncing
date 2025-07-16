@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bubble_bouncing"
-version = "0.1.0"
+version = "0.1.1"
 description = "Bubble bouncing simulation software."
 authors = [{ name = "Zhengyang Liu", email = "you@example.com" }]
 readme = "README.md"
@@ -16,6 +16,9 @@ Homepage = "https://github.com/zloverty/bubble_bouncing"
 
 [project.scripts]
 bcsim = "bubble_bouncing.cli:main"
+view_traj = "bubble_bouncing.cli:view_traj"
+view_morphology = "bubble_bouncing.cli:view_morphology"
+view_oseen = "bubble_bouncing.cli:view_oseen"
 
 [tool.setuptools]
 packages = ["bubble_bouncing"]
