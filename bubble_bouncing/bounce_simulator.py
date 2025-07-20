@@ -153,7 +153,7 @@ class BounceSimulator(Simulator):
             surface_flow = flow * self.re.unit_tangents
             lift = compute_lift(self.im.a, surface_flow, self.re.ds, U_re, lift_coef=self.params.lift_coef)
         else:
-            lift = np.zeros(3) * np.nan
+            lift = np.zeros(3) 
 
         return {
             "buoyancy": buoyancy,
@@ -209,7 +209,7 @@ class BounceSimulator(Simulator):
 
             R_dim = self.params.R
             rho = self.params.rho
-            dVdt_dim = (forces["buoyancy"] + forces["drag"] + forces["amf2"] + forces["tff"]) / (4/3 * np.pi * R_dim**3 * rho * forces["Cm"])
+            dVdt_dim = (forces["buoyancy"] + forces["drag"] + forces["amf2"] + forces["tff"] + forces["lift"]) / (4/3 * np.pi * R_dim**3 * rho * forces["Cm"])
             dVdt = self.units.to_nondim(dVdt_dim, "acceleration")
 
             return np.concatenate([dhdt, dVdt, V])
