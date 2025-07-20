@@ -5,7 +5,7 @@ import yaml
 import numpy as np
 from scipy.interpolate import interp1d
 from subprocess import run
-from bubble_bouncing.bubble import SimulationParams, Bubble
+from bubble_bouncing import SimulationParams, Bubble
 
 class BubbleDataVisualizer(dict):
     """This class implements a few bubble simulation visualization methods. Current plan is (i) screenshot with sampled time step, (ii) 480p15 video and (iii) 720p30 video."""

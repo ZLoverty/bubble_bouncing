@@ -18,7 +18,7 @@ from bubble_bouncing import BounceSimulator
 from bubble_bouncing import SimulationParams
 from bubble_bouncing import BubbleDataVisualizer
 import logging
-from config import Config
+from .config import Config
 
 test_folder = Config().test_folder
 
