@@ -1,3 +1,3 @@
 from .bounce_simulator import BounceSimulator
-from .bubble import SimulationParams
+from .bubble import Bubble, SimulationParams
 from .visualize import BubbleDataVisualizer
