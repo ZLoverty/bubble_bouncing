@@ -12,12 +12,16 @@ from bubble_bouncing.simulation import Simulator, Units, DataBuffer
 from bubble_bouncing.bubble import SimulationParams, compute_tff, compute_drag, compute_amf, compute_buoyancy, compute_lift, Bubble
 from bubble_bouncing.utils import _decomp, gradient_operators
 import logging
+import importlib.metadata
 
 class BounceSimulator(Simulator):
 
     def pre_run(self):
-        logging.info("============NEW SIMULATION==========")
+        version = importlib.metadata.version("bubble_bouncing")
+        logging.info("============NEW SIMULATION============")
+        logging.info(f"------------Version: {version}------------")
         logging.info(f"R = {self.params.R*1e3:.2f} mm | angle = {self.params.theta:.1f} deg | Cl = {self.params.lift_coef:.1f}")
+        logging.info("++++++++++++++++++++++++++++++++++++++")
         self.save_params()
         self.units = self._setup_units()
         self._setup_mesh()
