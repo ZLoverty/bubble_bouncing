@@ -30,6 +30,12 @@ If new dependencies are added in the future, update `environment.yaml` using
 conda env export --from-history > environment.yaml
 ```
 
+## Versions
+
+- v0.1.0: Bubble bouncing with Oseen wake circulation induced lift.
+- v0.1.1: Implement BCEP001.
+- v0.1.2: Fix bug - include lift force in the force calculation.
+
 ## Enhancement proposals (BCEP)
 
 ### BCEP001: improve visualization methods
