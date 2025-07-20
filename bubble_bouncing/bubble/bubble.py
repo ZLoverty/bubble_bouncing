@@ -1,25 +1,28 @@
 import numpy as np
 import healpy as hp
 from typing import Sequence
+from .vector_rotation import Vector
 
 class Bubble:
     """Compute the forces and the flow field associated with a moving bubble in a liquid. The forces we consider are buoyancy, drag, added mass force and thin film force when the bubble touches a solid surface. The flow field we consider is an Oseen wake. The flow field is characterized by two regions: a Stokeslet in the low Reynolds region and a compensating flow."""
 
     def __init__(self, 
                  a: float, 
-                 U: Sequence[float] = (1,0,0), 
+                 U: Sequence[float] = (1., 0., 0.), 
                  rho: float = 1e3, 
                  mu: float = 1e-3):
+        self.zn = np.array([0., 0., 1.])
         self.a = a # bubble radius
         self.U = np.array(U) # upward velocity (only upward!)
         self.rho = rho # density
         self.mu = mu # viscosity
-        self.pos = np.array([0, 0, 0]) # bubble position
+        self.pos = np.array([0., 0., 0.]) # bubble position
         self.surf_coords, self.unit_normals, self.ds = self._compute_surface_coords()
         self.unit_tangents = self._compute_surface_tangent_xy()
+        
 
     def Oseen_wake(self, points):
-        """Compute Oseen wake at given (relative) points. 
+        """Compute Oseen wake at given (relative) points. This function extends the `Oseen_wake_z` function by considering sphere velocity in arbitrary directions. This is done by rotating the points to z first, then compute flow field, and finally rotate the flow field back to the original coordinate system.
 
         Parameters
         ----------
@@ -34,33 +37,73 @@ class Bubble:
         Note
         ----
         The points here are the positions in the problem reference frame, i.e. the absolute positions of the problem. For example, if we consider the surface of another bubble as the points, `points = bubble.surf_coords + bubble.pos`. The relative position is handled inside the method.
+
+        Example
+        -------
+        >>> im = Bubble(a, U=U)
+        >>> re = Bubble(a, U=U1)
+        >>> flow = im.Oseen_wake(re.surf_coords+re.pos)
         """
         U = self.U
-        a = self.a
-        rho = self.rho
-        mu = self.mu
+        zn = self.zn
         U_mag = np.linalg.norm(U)
-        Re = rho * a * U_mag / mu
 
         # Rotate the points to a reference frame where U points to positive z direction
         rel_pos = points - self.pos
-        rel_pos_z = self._rotate_to_z(rel_pos)
+        rel_pos_z = self.rotate(rel_pos, U, -zn)
 
-        x, y, z = rel_pos_z[:, 0], rel_pos_z[:, 1], rel_pos_z[:, 2]
+        flow_ = self.Oseen_wake_z(U_mag, rel_pos_z)
+        
+        # rotate the velocity field back to the original frame
+        flow = self.rotate(flow_, -zn, U)
+
+        return flow
+    
+    def Oseen_wake_z(self, U, points):
+        """Compute the Oseen wake flow induced by a sphere moving in +z direction at velocity U. 
+        This is a direct implementation of the Oseen wake formula in the book "An introduction to suspension dynamics" by Guazzelli and Morris.
+
+        Parameters
+        ----------
+        U : float
+            Velocity magnitude in +z
+        points : ndarray
+            Relative positions to evaluate the flow velocities. Mush be of shape (N, 3).
+        
+        Returns
+        -------
+        flow : ndarray
+            Flow velocity of the Oseen wake. Same shape as points.
+
+        Note
+        ----
+        Since the original formula assumes velocity in -z direction, we need to rotate the resulting flow field around x or y by pi.
+        """
+
+        if points.shape[1] != 3:
+            raise ValueError("Points shape must be (N, 3).")
+        
+        a = self.a
+        rho = self.rho
+        mu = self.mu
+        zn = self.zn
+        Re = rho * a * U / mu
+
+        x, y, z = points[:, 0], points[:, 1], points[:, 2]
         r = (x**2 + y**2 + z**2) ** 0.5
         sint = (x**2 + y**2)**0.5 / r
         cost = z / r
         sinp = y / (x**2 + y**2)**0.5
         cosp = x / (x**2 + y**2)**0.5
 
-        u_r = U_mag * (
+        u_r = U * (
             - a**3 * cost / 2 / r**3 
             + 3 * a**2 / (2 * r**2 * Re) * (
                 1 - np.exp(- r * Re / 2 / a * (1 + cost))
             )
             - 3 * a * (1 - cost) / 4 / r * np.exp(- r * Re / 2 / a * (1 + cost))
         )
-        u_t = U_mag * (
+        u_t = U * (
             - a**3 * sint / 4 / r**3 
             - 3 * a * sint / 4 / r * np.exp(- r * Re / 2 / a * (1 + cost))
         )
@@ -76,13 +119,9 @@ class Bubble:
         u_x[invalid] = 0
         u_y[invalid] = 0
         u_z[invalid] = 0
-        flow_ = np.stack([u_x, u_y, u_z], axis=-1)
 
-        # rotate the velocity field back to the original frame
-        flow = self._rotate_from_z(flow_)
+        return np.stack([u_x, u_y, u_z], axis=-1)
 
-        return flow
-    
     def get_pos(self):
         """Get the position of the bubble."""
         return self.pos
@@ -146,163 +185,46 @@ class Bubble:
         y = y.flatten()
         z = z.flatten()
         return np.stack([x, y, z], axis=-1)
-
-    def _compute_rotation_axis_and_angle(self, U_unit, zn):
-        """Compute the rotation axis and angle to rotate the flow field from z direction to U_unit direction. This is a helper function to perform coordinate transformation.
+    
+    def rotate(self, vec, from_, to):
+        """Rotate a vector field from one coordinates to another. 
         
-        Parameters
+        Paremeters
         ----------
-        U_unit : array_like
-            A 3D vector representing the direction of the flow field.
-        zn : array_like
-            A 3D vector representing the positive z direction, usually [0, 0, 1].
-
-        Returns
-        -------
-        k : ndarray
-            The axis of rotation, a 3D vector.
-        alpha : float
-            The angle in radians by which to rotate the vector.
-        """
-        k = np.cross(zn, U_unit)
-        k /= np.linalg.norm(k)
-        cos_alpha = np.dot(zn, U_unit)
-        alpha = np.arccos(cos_alpha)
-        return k, alpha
-    
-    def _rotate_to_z(self, pos):
-        """Rotate the points to a reference frame where U points to positive z direction. This is a helper function to perform coordinate transformation.
-        
-        Parameters
-        ----------
-        pos : array_like
-            An array of shape (N, 3), the points to be rotated to the frame where U aligns with +z.
-
-        Returns
-        -------
-        pos_rotated : Vector
-            The rotated points as a Vector object.
-        """
-        U_unit = self.U / np.linalg.norm(self.U)
-        zn = np.array([0, 0, 1])
-        k, alpha = self._compute_rotation_axis_and_angle(U_unit, zn)
-        pos = Vector(pos)
-        pos_rotated = pos.rotate(k, alpha)
-        return pos_rotated
-    
-    def _rotate_from_z(self, pos):
-        """Rotate the points to a reference frame where U points to positive z direction. This is a helper function to perform coordinate transformation.
-        
-        Parameters
-        ----------
-        pos : array_like
-            An array of shape (N, 3), the points to be rotated to the problem frame.
-
-        Returns
-        -------
-        pos_rotated : Vector
-            The rotated points as a Vector object.
-        """
-        U_unit = self.U / np.linalg.norm(self.U)
-        zn = np.array([0, 0, 1])
-        k, alpha = self._compute_rotation_axis_and_angle(U_unit, zn)
-        pos = Vector(pos)
-        pos_rotated = pos.rotate(k, -alpha)
-        return pos_rotated
-    
-def _skew_symmetric(k):
-    """
-    Convert a vector k to a skew-symmetric matrix.
-    
-    Parameters
-    ----------
-    k : array_like
-        A 3D vector.
-    
-    Returns
-    -------
-    K : ndarray
-        A 3x3 skew-symmetric matrix corresponding to the vector k.
-    """
-
-    if np.isclose(np.linalg.norm(k), 1.0) == False:
-        k = k / np.linalg.norm(k)
-        
-    K = np.array([[0.   , -k[2], k[1] ],
-                    [k[2] , 0.   , -k[0]],
-                    [-k[1], k[0] , 0.   ]])
-    return K
-
-def rotation_matrix_axis(k, angle):
-    """
-    Rotate a vector v around an axis k by a given angle. This function computes the rotation matrix using the Rodrigues' rotation formula.
-    
-    Parameters
-    ----------
-    v : array_like
-        A 3D vector to be rotated.
-    k : array_like
-        A 3D vector representing the axis of rotation.
-    angle : float
-        The angle in radians by which to rotate the vector.
-    
-    Returns
-    -------
-    v_rotated : ndarray
-        The rotated vector.
-    """
-
-    if np.isclose(np.linalg.norm(k), 0.0):
-        return np.eye(3)
-    else:
-        k = k / np.linalg.norm(k)
-    
-    K = _skew_symmetric(k)
-    
-    R = (
-        np.eye(3) * np.cos(angle) 
-        + K * np.sin(angle) 
-        + np.outer(k, k) * (1 - np.cos(angle))
-    )
-    
-    return R
-
-class Vector(np.ndarray):
-    """
-    A subclass of numpy.ndarray to represent 3D vector(s).
-    
-    This class allows for easy rotation of the vector(s).
-    """
-    
-    def __new__(cls, input_array):
-        obj = np.asarray(input_array).view(cls)
-        if obj.shape[1] != 3:
-            raise ValueError("Vector must be a 3D vector.")
-        return obj
-    
-    def rotate(self, k, angle):
-        """
-        Rotate the vector around an axis k by a given angle.
-        
-        Parameters
-        ----------
-        k : array_like
-            A 3D vector representing the axis of rotation.
-        angle : float
-            The angle in radians by which to rotate the vector.
+        vec : ndarray
+            Vector field to be rotated. Must be of shape (N, 3).
+        from_ : array
+            Director of the original coordinates. Must be of shape (3,).
+        to : array
+            Director of the rotated coordinates. Must be of shape (3,).
         
         Returns
         -------
-        Vector
-            The rotated vector.
-
-        Example
-        -------
-        >>> points = np.random.rand(10, 3)
-        >>> k = np.array([0, 0, 1])
-        >>> angle = np.pi / 4  # 45 degrees
-        >>> rotated_points = Vector(points).rotate(k, angle)
+        rotated : ndarray
+            Rotated vector field.
         """
-        R = rotation_matrix_axis(k, angle)
-        return Vector((R @ self.T).T)
+        k = np.cross(from_, to)
+        dot = (from_ * to).sum()
+        
+        k_norm = np.linalg.norm(k)
+        if np.isclose(k_norm, 0.0):
+            # if from_ and to are in the same or opposite direction, we can use an arbitrary direction that is perpendicular to to.
+            k = np.array([-to[2], 0, to[0]])
+            k /= np.linalg.norm(k)
+            if dot > 0:
+                alpha = 0.0
+            else:
+                alpha = np.pi
+        else:
+            k /= k_norm
+            cos_alpha = np.dot(from_, to)
+            alpha = np.arccos(cos_alpha)
+ 
+        vec = Vector(vec)
+        rotated = vec.rotate(k, alpha)
+        return rotated
+    
+
+
+
     
