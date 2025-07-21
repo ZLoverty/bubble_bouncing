@@ -169,14 +169,13 @@ class Bubble:
     def _compute_surface_tangent_xy(self):
         """Compute sphere surface tangential unit vectors, specifically their projections on the xy plane."""
         tangent = np.zeros_like(self.unit_normals)
-        tangent[:, 0] = self.unit_normals[:, 1]
-        tangent[:, 1] = - self.unit_normals[:, 0]
+        tangent[:, 0] = - self.unit_normals[:, 1]
+        tangent[:, 1] = self.unit_normals[:, 0]
         return tangent / np.linalg.norm(tangent, axis=1, keepdims=True)
     
-    def _grid(self):
+    def _grid(self, N=10, nlim=2):
         """Create a grid of points around the bubble for testing flow field."""
-        lim = self.a * 3
-        N = 10
+        lim = self.a * nlim
         x = np.linspace(-lim, lim, N)
         y = np.linspace(-lim, lim, N)
         z = np.linspace(-lim, lim, N)

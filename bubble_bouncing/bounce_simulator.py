@@ -273,7 +273,6 @@ class BounceSimulator(Simulator):
                 self.im = Bubble(R, U=self.U_im)
                 self.im.set_pos(self.x_im_start)
                 self.re = Bubble(R)
-                lift = np.array([0, 0, 0])
 
             return 1
 

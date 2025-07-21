@@ -34,7 +34,8 @@ conda env export --from-history > environment.yaml
 
 - v0.1.0: Bubble bouncing with Oseen wake circulation induced lift.
 - v0.1.1: Implement BCEP001.
-- v0.1.2: Fix bug - include lift force in the force calculation.
+- v0.1.2: Fix bug. Include lift force in the force calculation.
+- v0.1.3: Fix bug. (i) Change the sign of unit tangent vectors on bubble surface to make it consistent with the lift force calculation. (ii) Fix the Oseen wake calculation for arbitrary bubble velocity.
 
 ## Enhancement proposals (BCEP)
 
