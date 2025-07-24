@@ -22,3 +22,6 @@ def view_morphology():
 
 def view_oseen():
     vis.Oseen_circulation(mode=args.mode, playback=playback)
+
+def view_force():
+    vis.force(mode=args.mode, playback=playback)
