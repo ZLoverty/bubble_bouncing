@@ -32,10 +32,10 @@ conda env export --from-history > environment.yaml
 
 ## Versions
 
-- v0.1.0: Bubble bouncing with Oseen wake circulation induced lift.
-- v0.1.1: Implement BCEP001.
-- v0.1.2: Fix bug. Include lift force in the force calculation.
-- v0.1.3: Fix bug. (i) Change the sign of unit tangent vectors on bubble surface to make it consistent with the lift force calculation. (ii) Fix the Oseen wake calculation for arbitrary bubble velocity.
+- 0.1.0: Bubble bouncing with Oseen wake circulation induced lift.
+- 0.1.1: Implement BCEP001.
+- 0.1.2: Fix bug. Include lift force in the force calculation.
+- 0.1.3: Fix bug. (i) Change the sign of unit tangent vectors on bubble surface to make it consistent with the lift force calculation. (ii) Fix the Oseen wake calculation for arbitrary bubble velocity.
 
 ## Enhancement proposals (BCEP)
 
@@ -53,5 +53,5 @@ conda env export --from-history > environment.yaml
 
 ### BCEP003: Make visualize.py more modular
 
-The current form is difficult to maintain, due to the various mode options and the combined combined dynamic and static objects. Ideally, this class should be like the manim main class, where adding a reference box should just be a one-liner. THere should be methods such as `add_bubble`, `add_surface`, `camera_closeup(object)`. Then, the completed scene would control the export options, such as `w`, `s`, `v` and `vh`. 
+The current form is difficult to maintain, due to the various mode options and the combined dynamic and static objects. Ideally, this class should be like the manim main class, where adding a reference box should just be a one-liner. There should be methods such as `add_bubble`, `add_surface`, `camera_closeup(object)`. Then, the completed scene would control the export options, such as `w`, `s`, `v` and `vh`. 
 
