@@ -1,14 +1,32 @@
 """
 cli.py
 ======
-This is the main entry of the bubble bouncing simulation. It is a ready to run script that can take command line arguments to run simulations with different parameters. Use the following syntax:
+This is the main entry of the bubble bouncing simulation. It is a ready to run script that can take command line arguments to run simulations with different parameters. Install the package either directly from the GitHub repo:
 
-python cli.py --save_folder FOLDER [-f] [--arg ARG]
+```
+pip install git+https://github.com/ZLoverty/bubble_bouncing.git
+```
 
-or as installed packages:
+or, clone the git repo and install as editable package for development
 
+```
+git clone https://github.com/ZLoverty/bubble_bouncing.git
+conda env create -f environment.yaml
+conda activate bcsim
+pip install -e .
+```
+
+Once the `bubble_bouncing` package is installed, use the following script to run the bubble bouncing simulation.
+
+```
 bcsim --save_folder FOLDER [-f] [--arg ARG]
+```
 
+For a full list of available arguments, see
+
+```
+bcsim -h
+```
 """
 
 from pathlib import Path
