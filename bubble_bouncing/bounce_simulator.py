@@ -8,9 +8,9 @@ The main logic of the bubble bouncing simulation. It initializes the simulator, 
 import numpy as np
 from scipy import integrate
 import h5py
-from bubble_bouncing.simulation import Simulator, Units, DataBuffer
-from bubble_bouncing.bubble import SimulationParams, compute_tff, compute_drag, compute_amf, compute_buoyancy, compute_lift, Bubble
-from bubble_bouncing.utils import _decomp, gradient_operators
+from simulation import Simulator, Units, DataBuffer
+from .bubble import SimulationParams, compute_tff, compute_drag, compute_amf, compute_buoyancy, compute_lift, Bubble
+from .utils import _decomp, gradient_operators
 import logging
 import importlib.metadata
 
@@ -251,6 +251,9 @@ class BounceSimulator(Simulator):
                 else:
                     self.data_buffer["x_im"].append(self.im.pos)
                     self.data_buffer["V_im"].append(self.im.U)
+                
+                # show progress
+                raise NotImplementedError("add show_progress function once implemented in myimagelib")
 
             # Flush data to file
             if t == 0 or t - self.last_save >= self.save_interval:

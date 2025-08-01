@@ -1,0 +1,2 @@
+git+https://github.com/ZLoverty/simulation.git
+git+https://github.com/ZLoverty/mylib.git

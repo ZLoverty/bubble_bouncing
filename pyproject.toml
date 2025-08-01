@@ -6,19 +6,17 @@ build-backend = "setuptools.build_meta"
 name = "bubble_bouncing"
 version = "0.2.0"
 description = "Bubble bouncing simulation software."
-authors = [{ name = "Zhengyang Liu", email = "liuzy19911112@example.com" }]
+authors = [{ name = "Zhengyang Liu", email = "liuzy19911112@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
+dependencies = ["-r requirements.txt"]
 
 [project.urls]
 Homepage = "https://github.com/zloverty/bubble_bouncing"
 
 [project.scripts]
 bcsim = "bubble_bouncing.cli:main"
-view_traj = "bubble_bouncing.cli_vis:view_traj"
-view_morphology = "bubble_bouncing.cli_vis:view_morphology"
-view_oseen = "bubble_bouncing.cli_vis:view_oseen"
 
 [tool.setuptools]
 packages = ["bubble_bouncing"]

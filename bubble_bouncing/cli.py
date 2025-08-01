@@ -31,10 +31,9 @@ bcsim -h
 
 from pathlib import Path
 import argparse
-from bubble_bouncing.utils import parse_params, available_keys
-from bubble_bouncing import BounceSimulator
-from bubble_bouncing import SimulationParams
-from bubble_bouncing import BubbleDataVisualizer
+from .utils import parse_params, available_keys
+from .bounce_simulator import BounceSimulator
+from .bubble import SimulationParams
 import logging
 from .config import Config
 

@@ -9,6 +9,12 @@ On top of existing works, the current simulation code features:
 3. Data saveing with high performance .h5 files;
 4. Visualization tools. 
 
+## Installation
+
+```
+pip install git+https://github.com/ZLoverty/bubble_bouncing.git
+```
+
 ## Note for future development
 
 Import within the package is adapted to the "editable install" style. That said, internal imports are only valid once this package is installed with
@@ -32,11 +38,11 @@ conda env export --from-history > environment.yaml
 
 ## Versions
 
-- 0.1.0: Bubble bouncing with Oseen wake circulation induced lift.
-- 0.1.1: Implement BCEP001.
-- 0.1.2: Fix bug. Include lift force in the force calculation.
-- 0.1.3: Fix bug. (i) Change the sign of unit tangent vectors on bubble surface to make it consistent with the lift force calculation. (ii) Fix the Oseen wake calculation for arbitrary bubble velocity.
 - 0.2.0: Implement BCEP005. BCEP002 and BCEP003 are also implemented, but moved to a separate repo for better maintainance logic.
+- 0.1.3: Fix bug. (i) Change the sign of unit tangent vectors on bubble surface to make it consistent with the lift force calculation. (ii) Fix the Oseen wake calculation for arbitrary bubble velocity.
+- 0.1.2: Fix bug. Include lift force in the force calculation.
+- 0.1.1: Implement BCEP001.
+- 0.1.0: Bubble bouncing with Oseen wake circulation induced lift.
 
 ## Enhancement proposals (BCEP)
 
