@@ -10,7 +10,7 @@ authors = [{ name = "Zhengyang Liu", email = "liuzy19911112@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
-dependencies = ["-r requirements.txt"]
+dependencies = ["git+https://github.com/ZLoverty/simulation.git"]
 
 [project.urls]
 Homepage = "https://github.com/zloverty/bubble_bouncing"
