@@ -13,6 +13,7 @@ from .bubble import SimulationParams, compute_tff, compute_drag, compute_amf, co
 from .utils import _decomp, gradient_operators
 import logging
 import importlib.metadata
+from myimagelib import show_progress
 
 class BounceSimulator(Simulator):
 
@@ -253,7 +254,7 @@ class BounceSimulator(Simulator):
                     self.data_buffer["V_im"].append(self.im.U)
                 
                 # show progress
-                raise NotImplementedError("add show_progress function once implemented in myimagelib")
+                show_progress(t/self.T, )
 
             # Flush data to file
             if t == 0 or t - self.last_save >= self.save_interval:
@@ -280,9 +281,9 @@ class BounceSimulator(Simulator):
             return 1
 
         logging.info("Simulation starts!")
-        T = self.units.to_nondim(self.params.T, "time")
+        self.T = self.units.to_nondim(self.params.T, "time")
 
-        sol = integrate.solve_ivp(film_drainage, [0, T], self.initial_state, method="BDF", events=event_print, atol=1e-6, rtol=1e-3)
+        sol = integrate.solve_ivp(film_drainage, [0, self.T], self.initial_state, method="BDF", events=event_print, atol=1e-6, rtol=1e-3)
 
     def run(self):
         self.pre_run()

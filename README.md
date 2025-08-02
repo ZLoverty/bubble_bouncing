@@ -11,9 +11,35 @@ On top of existing works, the current simulation code features:
 
 ## Installation
 
+Install dependencies:
+
+```
+pip install git+https://github.com/ZLoverty/simulation.git
+pip install git+https://github.com/ZLoverty/mylib.git
+```
+
+Then install the current package:
+
 ```
 pip install git+https://github.com/ZLoverty/bubble_bouncing.git
+
 ```
+
+## Basic guide
+
+To run a test bubble simulation, run
+
+```
+bcsim
+```
+
+To customize the parameters, first read the docstring for available parameters
+
+```
+bcsim -h
+```
+
+Then, use double dash to set optional parameters.
 
 ## Note for future development
 
