@@ -135,11 +135,15 @@ def compute_tff(p, dhdx, dx):
     tff = np.array([tffx, tffy, 0])
     return tff
 
-def compute_lift(a, surface_flow, ds, U, lift_coef=1.0):
+def compute_lift(a, surface_flow, ds, U, rho, lift_coef=1.0):
     """Compute the circulation induced by the Oseen wake flow. We use the following formula
     
     Gamma = 1/2a int_S u_s dS
-    lift = 4 * np.pi * a**3 / 3 * lift_coef / np.pi / a**2 * (Gamma x U)
+    lift =  lift_coef * rho * Omega / (a^2 * pi) * (Gamma x U)
+
+    where Omega is the bubble volume
+
+    Omega = 4 * np.pi * a^3 / 3
 
     Parameters
     ----------
@@ -171,5 +175,6 @@ def compute_lift(a, surface_flow, ds, U, lift_coef=1.0):
     """
     
     Gamma = 1 / 2 / a * surface_flow.sum() * ds * np.array([0, 0, 1])
-    lift = 4 * np.pi * a**3 / 3 * lift_coef / np.pi / a**2 * np.cross(Gamma, U)
+    Omega = 4 * np.pi * a**3 / 3
+    lift = lift_coef * rho * Omega / np.pi / a**2 * np.cross(Gamma, U)
     return lift

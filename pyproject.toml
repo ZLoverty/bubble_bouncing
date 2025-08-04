@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bubble_bouncing"
-version = "0.2.0"
+version = "0.2.1"
 description = "Bubble bouncing simulation software."
 authors = [{ name = "Zhengyang Liu", email = "liuzy19911112@gmail.com" }]
 readme = "README.md"

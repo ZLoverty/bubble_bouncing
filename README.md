@@ -64,6 +64,7 @@ conda env export --from-history > environment.yaml
 
 ## Versions
 
+- 0.2.1: Fix the lift force formula by including the density term.
 - 0.2.0: Implement BCEP005. BCEP002 and BCEP003 are also implemented, but moved to a separate repo for better maintainance logic.
 - 0.1.3: Fix bug. (i) Change the sign of unit tangent vectors on bubble surface to make it consistent with the lift force calculation. (ii) Fix the Oseen wake calculation for arbitrary bubble velocity.
 - 0.1.2: Fix bug. Include lift force in the force calculation.

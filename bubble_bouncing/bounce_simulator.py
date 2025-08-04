@@ -156,7 +156,7 @@ class BounceSimulator(Simulator):
             self.re.set_pos(x_re)
             flow = self.im.Oseen_wake(self.re.pos+self.re.surf_coords)
             surface_flow = flow * self.re.unit_tangents
-            lift = compute_lift(self.im.a, surface_flow, self.re.ds, U_re, lift_coef=self.params.lift_coef)
+            lift = compute_lift(self.im.a, surface_flow, self.re.ds, U_re, rho, lift_coef=self.params.lift_coef)
         else:
             lift = np.zeros(3) 
 
