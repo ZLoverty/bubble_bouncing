@@ -6,8 +6,8 @@ On top of existing works, the current simulation code features:
 
 1. Oseen wake induced circulation, which leads to a lift force;
 2. Object oriented programming with improved readability and maintainability;
-3. Data saveing with high performance .h5 files;
-4. Visualization tools. 
+3. Data saving with high performance *.h5 files;
+4. Visualization tools (now in a separate package [pyvid](https://github.com/ZLoverty/pyvid), which has been made more general-purpose). 
 
 ## Installation
 
